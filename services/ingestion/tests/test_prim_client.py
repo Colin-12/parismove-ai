@@ -42,7 +42,7 @@ class TestGetStopMonitoring:
         async with PrimClient(api_key="test-key") as client:
             visits = await client.get_stop_monitoring("STIF:StopPoint:Q:41136:")
 
-        assert len(visits) == 3
+        assert len(visits) == 5
         assert visits[0].stop_id == "STIF:StopPoint:Q:41136:"
 
     @pytest.mark.asyncio
@@ -87,4 +87,4 @@ class TestGetStopMonitoring:
         async with PrimClient(api_key="test-key") as client:
             visits = await client.get_stop_monitoring("STIF:StopPoint:Q:1:")
 
-        assert len(visits) == 3
+        assert len(visits) == 5
