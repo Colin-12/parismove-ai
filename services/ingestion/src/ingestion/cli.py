@@ -20,13 +20,13 @@ from typing import Any
 
 import click
 import httpx
+from shared.db import create_database_engine
+from shared.schemas import StopVisit
 
 from ingestion.clients.prim import PrimClient
 from ingestion.config import get_settings
 from ingestion.loaders import load_stop_visits
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
-from shared.db import create_database_engine
-from shared.schemas import StopVisit
 
 logger = logging.getLogger(__name__)
 

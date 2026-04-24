@@ -12,9 +12,8 @@ import logging
 from collections.abc import Iterable
 from typing import TypedDict
 
-from sqlalchemy import Engine, text
-
 from shared.schemas import StopVisit
+from sqlalchemy import Engine, text
 
 logger = logging.getLogger(__name__)
 

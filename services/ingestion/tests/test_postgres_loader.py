@@ -6,12 +6,11 @@ directe contre Supabase via le script `scripts/check_loader.py`.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-import pytest
+from shared.schemas import StopVisit, TransportMode
 
 from ingestion.loaders.postgres import _visit_to_row, load_stop_visits
-from shared.schemas import StopVisit, TransportMode
 
 
 def _make_visit(
@@ -29,11 +28,11 @@ def _make_visit(
         operator="RATP",
         direction="Aéroport CDG",
         transport_mode=TransportMode.RER,
-        aimed_arrival=datetime(2026, 4, 24, 10, 0, tzinfo=timezone.utc),
-        expected_arrival=datetime(2026, 4, 24, 10, 3, tzinfo=timezone.utc),
+        aimed_arrival=datetime(2026, 4, 24, 10, 0, tzinfo=UTC),
+        expected_arrival=datetime(2026, 4, 24, 10, 3, tzinfo=UTC),
         arrival_status="delayed",
         recorded_at=recorded_at
-        or datetime(2026, 4, 24, 9, 59, tzinfo=timezone.utc),
+        or datetime(2026, 4, 24, 9, 59, tzinfo=UTC),
     )
 
 
