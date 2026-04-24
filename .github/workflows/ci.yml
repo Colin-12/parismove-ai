@@ -19,9 +19,8 @@ jobs:
 
       - name: Installation
         run: |
+          pip install -e shared
           pip install -e "services/ingestion[dev]"
-          pip install -e "services/ml[dev]"
-          pip install -e "services/api[dev]"
 
       - name: Ruff (linting)
         run: ruff check services/
@@ -42,9 +41,8 @@ jobs:
 
       - name: Installation
         run: |
+          pip install -e shared
           pip install -e "services/ingestion[dev]"
-          pip install -e "services/ml[dev]"
-          pip install -e "services/api[dev]"
 
       - name: Pytest
         run: |
