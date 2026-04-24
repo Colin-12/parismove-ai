@@ -6,6 +6,7 @@ Usage:
     python -m ingestion.cli run --source prim --mock
     python -m ingestion.cli run --source prim --limit 10
     python -m ingestion.cli run --source prim --save-raw data/raw/
+    python -m ingestion.cli run --source prim --store
 """
 from __future__ import annotations
 
@@ -19,16 +20,16 @@ from typing import Any
 
 import click
 import httpx
-from shared.schemas import StopVisit
 
 from ingestion.clients.prim import PrimClient
 from ingestion.config import get_settings
+from ingestion.loaders import load_stop_visits
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
+from shared.db import create_database_engine
+from shared.schemas import StopVisit
 
 logger = logging.getLogger(__name__)
 
-# Arrêts bien fournis pour les tests par défaut.
-# Format StopArea:SP recommandé depuis mars 2023 (cf. changements IDFM).
 DEFAULT_STOPS = [
     "STIF:StopArea:SP:71517:",  # La Défense (RER A + métro 1 + bus + tram)
     "STIF:StopArea:SP:42587:",  # Châtelet (métro 1, 4, 7, 11, 14)
@@ -43,10 +44,7 @@ FIXTURES_DIR = (
 def _save_raw_response(
     raw: dict[str, Any], stop_id: str, output_dir: Path
 ) -> Path:
-    """Sauvegarde une réponse PRIM brute en JSON horodaté.
-
-    Utile pour enrichir les fixtures de tests avec de vraies réponses.
-    """
+    """Sauvegarde une réponse PRIM brute en JSON horodaté."""
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_stop = stop_id.replace(":", "_").strip("_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -63,8 +61,11 @@ async def _run_prim(
     use_mock: bool,
     limit: int | None,
     save_raw: Path | None,
+    store: bool,
 ) -> None:
     """Récupère les prochains passages pour une liste d'arrêts."""
+    all_visits: list[StopVisit] = []
+
     if use_mock:
         click.echo("Mode mock : lecture depuis la fixture locale.")
         fixture = FIXTURES_DIR / "prim_stop_monitoring.json"
@@ -72,35 +73,62 @@ async def _run_prim(
             raw = json.load(f)
         visits = parse_stop_monitoring_response(raw)
         _display(visits, limit)
-        return
+        all_visits.extend(visits)
+    else:
+        settings = get_settings()
+        if not settings.prim_api_key:
+            click.echo(
+                "❌ PRIM_API_KEY manquante. Renseigne-la dans .env ou "
+                "utilise --mock pour tester hors ligne.",
+                err=True,
+            )
+            sys.exit(1)
 
+        async with PrimClient(
+            api_key=settings.prim_api_key,
+            base_url=str(settings.prim_base_url),
+        ) as client:
+            for stop_id in stop_ids:
+                click.echo(f"\n→ Arrêt {stop_id}")
+                try:
+                    if save_raw is not None:
+                        raw = await _fetch_raw(client, stop_id)
+                        saved_path = _save_raw_response(raw, stop_id, save_raw)
+                        click.echo(f"  Réponse brute sauvegardée : {saved_path}")
+                        visits = parse_stop_monitoring_response(raw)
+                    else:
+                        visits = await client.get_stop_monitoring(stop_id)
+                    _display(visits, limit)
+                    all_visits.extend(visits)
+                except httpx.HTTPError as exc:
+                    click.echo(f"  ❌ Erreur réseau : {exc}", err=True)
+
+    # Stockage en base si demandé
+    if store and all_visits:
+        _store_visits(all_visits)
+
+
+def _store_visits(visits: list[StopVisit]) -> None:
+    """Persiste les StopVisit en base de données."""
     settings = get_settings()
-    if not settings.prim_api_key:
+    if not settings.database_url:
         click.echo(
-            "❌ PRIM_API_KEY manquante. Renseigne-la dans .env ou "
-            "utilise --mock pour tester hors ligne.",
+            "❌ DATABASE_URL manquante. Impossible de stocker sans configuration.",
             err=True,
         )
         sys.exit(1)
 
-    async with PrimClient(
-        api_key=settings.prim_api_key,
-        base_url=str(settings.prim_base_url),
-    ) as client:
-        for stop_id in stop_ids:
-            click.echo(f"\n→ Arrêt {stop_id}")
-            try:
-                if save_raw is not None:
-                    # On récupère la réponse brute pour pouvoir la sauvegarder
-                    raw = await _fetch_raw(client, stop_id)
-                    saved_path = _save_raw_response(raw, stop_id, save_raw)
-                    click.echo(f"  Réponse brute sauvegardée : {saved_path}")
-                    visits = parse_stop_monitoring_response(raw)
-                else:
-                    visits = await client.get_stop_monitoring(stop_id)
-                _display(visits, limit)
-            except httpx.HTTPError as exc:
-                click.echo(f"  ❌ Erreur réseau : {exc}", err=True)
+    click.echo(f"\n💾 Stockage de {len(visits)} passages en base...")
+    engine = create_database_engine(settings.database_url)
+    try:
+        result = load_stop_visits(engine, visits)
+    finally:
+        engine.dispose()
+
+    click.echo(
+        f"   {result['inserted']} nouveaux passages insérés "
+        f"({result['total'] - result['inserted']} doublons ignorés)."
+    )
 
 
 async def _fetch_raw(client: PrimClient, stop_id: str) -> dict[str, Any]:
@@ -111,7 +139,6 @@ async def _fetch_raw(client: PrimClient, stop_id: str) -> dict[str, Any]:
 
 
 def _format_delay(delay: int | None) -> str:
-    """Formate un retard en secondes de manière lisible."""
     if delay is None:
         return "?"
     if delay > 60:
@@ -160,28 +187,19 @@ def main(log_level: str) -> None:
     required=True,
     help="Source à ingérer",
 )
-@click.option(
-    "--stop",
-    "stops",
-    multiple=True,
-    help="ID d'arrêt PRIM (répétable). Par défaut : quelques arrêts Paris centre.",
-)
-@click.option(
-    "--mock",
-    is_flag=True,
-    help="Utilise une fixture locale au lieu d'appeler l'API (dev / démo).",
-)
-@click.option(
-    "--limit",
-    type=int,
-    default=15,
-    help="Nombre maximum de passages à afficher par arrêt (0 = tous).",
-)
+@click.option("--stop", "stops", multiple=True, help="ID d'arrêt PRIM (répétable).")
+@click.option("--mock", is_flag=True, help="Utilise une fixture locale.")
+@click.option("--limit", type=int, default=15, help="Nb max de passages affichés.")
 @click.option(
     "--save-raw",
     type=click.Path(path_type=Path),
     default=None,
-    help="Sauvegarde les réponses brutes JSON dans le dossier indiqué.",
+    help="Sauvegarde les réponses brutes dans ce dossier.",
+)
+@click.option(
+    "--store",
+    is_flag=True,
+    help="Stocke les passages captés dans la BDD (DATABASE_URL requise).",
 )
 def run(
     source: str,
@@ -189,6 +207,7 @@ def run(
     mock: bool,
     limit: int,
     save_raw: Path | None,
+    store: bool,
 ) -> None:
     """Exécute un job d'ingestion."""
     display_limit = None if limit == 0 else limit
@@ -201,6 +220,7 @@ def run(
                 use_mock=mock,
                 limit=display_limit,
                 save_raw=save_raw,
+                store=store,
             )
         )
     elif source in {"aqicn", "meteo", "all"}:
