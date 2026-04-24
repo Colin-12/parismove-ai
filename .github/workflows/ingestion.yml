@@ -30,25 +30,27 @@ jobs:
           cache: "pip"
 
       - name: Installation des dépendances
-        run: pip install -e "services/ingestion"
+        run: |
+          pip install -e shared
+          pip install -e services/ingestion
 
       - name: Ingestion PRIM IDFM
         if: ${{ inputs.source == 'prim' || inputs.source == 'all' || github.event_name == 'schedule' }}
-        run: python -m ingestion.cli run --source prim
+        run: python -m ingestion.cli run --source prim --store
         env:
           PRIM_API_KEY: ${{ secrets.PRIM_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Ingestion AQICN
-        if: ${{ inputs.source == 'aqicn' || inputs.source == 'all' || github.event_name == 'schedule' }}
-        run: python -m ingestion.cli run --source aqicn
+        if: false  # TODO: activer quand le client AQICN sera implémenté
+        run: python -m ingestion.cli run --source aqicn --store
         env:
           AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Ingestion Open-Meteo
-        if: ${{ inputs.source == 'meteo' || inputs.source == 'all' || github.event_name == 'schedule' }}
-        run: python -m ingestion.cli run --source meteo
+        if: false  # TODO: activer quand le client Open-Meteo sera implémenté
+        run: python -m ingestion.cli run --source meteo --store
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
