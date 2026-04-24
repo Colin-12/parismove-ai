@@ -1,0 +1,57 @@
+name: Ingestion planifiée
+
+# Exécute le pipeline d'ingestion toutes les 15 minutes.
+# Utilise les secrets GitHub pour les clés API.
+# Coût : 0 € (dans les 2000 minutes/mois gratuites).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # toutes les 15 minutes
+  workflow_dispatch:          # permet le déclenchement manuel
+    inputs:
+      source:
+        description: "Source à ingérer (prim, aqicn, meteo, all)"
+        required: false
+        default: "all"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Installation des dépendances
+        run: pip install -e "services/ingestion"
+
+      - name: Ingestion PRIM IDFM
+        if: ${{ inputs.source == 'prim' || inputs.source == 'all' || github.event_name == 'schedule' }}
+        run: python -m ingestion.cli run --source prim
+        env:
+          PRIM_API_KEY: ${{ secrets.PRIM_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Ingestion AQICN
+        if: ${{ inputs.source == 'aqicn' || inputs.source == 'all' || github.event_name == 'schedule' }}
+        run: python -m ingestion.cli run --source aqicn
+        env:
+          AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Ingestion Open-Meteo
+        if: ${{ inputs.source == 'meteo' || inputs.source == 'all' || github.event_name == 'schedule' }}
+        run: python -m ingestion.cli run --source meteo
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Notifier en cas d'échec
+        if: failure()
+        run: echo "::warning::Ingestion échouée, voir les logs"
