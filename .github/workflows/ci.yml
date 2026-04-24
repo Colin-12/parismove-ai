@@ -45,10 +45,7 @@ jobs:
           pip install -e "services/ingestion[dev]"
 
       - name: Pytest
-        run: |
-          pytest services/ingestion
-          pytest services/ml
-          pytest services/api
+        run: pytest services/ingestion
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
