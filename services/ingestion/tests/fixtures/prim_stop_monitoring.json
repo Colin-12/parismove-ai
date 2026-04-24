@@ -1,0 +1,74 @@
+{
+  "Siri": {
+    "ServiceDelivery": {
+      "ResponseTimestamp": "2026-04-24T10:00:00Z",
+      "ProducerRef": {"value": "ILE-DE-FRANCE-MOBILITES"},
+      "StopMonitoringDelivery": [
+        {
+          "version": "2.0",
+          "ResponseTimestamp": "2026-04-24T10:00:00Z",
+          "MonitoredStopVisit": [
+            {
+              "RecordedAtTime": "2026-04-24T10:00:00Z",
+              "ItemIdentifier": "SNCF:Item::uid-1:",
+              "MonitoringRef": {"value": "STIF:StopPoint:Q:41136:"},
+              "MonitoredVehicleJourney": {
+                "LineRef": {"value": "STIF:Line::C01742:"},
+                "DirectionName": [{"value": "Robinson / Saint-Rémy-lès-Chevreuse"}],
+                "PublishedLineName": [{"value": "RER B"}],
+                "VehicleMode": ["rail"],
+                "OperatorRef": {"value": "STIF:Operator::RATP:"},
+                "MonitoredCall": {
+                  "StopPointName": [{"value": "Châtelet-Les Halles"}],
+                  "AimedArrivalTime": "2026-04-24T10:05:00Z",
+                  "ExpectedArrivalTime": "2026-04-24T10:07:30Z",
+                  "ArrivalStatus": "delayed",
+                  "AimedDepartureTime": "2026-04-24T10:05:30Z",
+                  "ExpectedDepartureTime": "2026-04-24T10:08:00Z"
+                },
+                "FramedVehicleJourneyRef": {
+                  "DataFrameRef": {"value": "any"},
+                  "DatedVehicleJourneyRef": {"value": "SNCF:VehicleJourney::123456:"}
+                }
+              }
+            },
+            {
+              "RecordedAtTime": "2026-04-24T10:00:00Z",
+              "ItemIdentifier": "SNCF:Item::uid-2:",
+              "MonitoringRef": {"value": "STIF:StopPoint:Q:41136:"},
+              "MonitoredVehicleJourney": {
+                "LineRef": {"value": "STIF:Line::C01742:"},
+                "DirectionName": [{"value": "Mitry-Claye / Aéroport CDG"}],
+                "PublishedLineName": [{"value": "RER B"}],
+                "VehicleMode": ["rail"],
+                "MonitoredCall": {
+                  "StopPointName": [{"value": "Châtelet-Les Halles"}],
+                  "AimedArrivalTime": "2026-04-24T10:08:00Z",
+                  "ExpectedArrivalTime": "2026-04-24T10:08:00Z",
+                  "ArrivalStatus": "onTime"
+                }
+              }
+            },
+            {
+              "RecordedAtTime": "2026-04-24T10:00:00Z",
+              "ItemIdentifier": "RATP:Item::uid-3:",
+              "MonitoringRef": {"value": "STIF:StopPoint:Q:41136:"},
+              "MonitoredVehicleJourney": {
+                "LineRef": {"value": "STIF:Line::C01371:"},
+                "DirectionName": [{"value": "La Défense (Grande Arche)"}],
+                "PublishedLineName": [{"value": "1"}],
+                "VehicleMode": ["metro"],
+                "MonitoredCall": {
+                  "StopPointName": [{"value": "Châtelet"}],
+                  "AimedArrivalTime": "2026-04-24T10:03:00Z",
+                  "ExpectedArrivalTime": "2026-04-24T10:03:00Z",
+                  "ArrivalStatus": "onTime"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
