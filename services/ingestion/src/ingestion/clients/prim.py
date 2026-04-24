@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 import httpx
+from shared.schemas import StopVisit
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -21,7 +22,6 @@ from tenacity import (
 )
 
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
-from shared.schemas import StopVisit
 
 logger = logging.getLogger(__name__)
 

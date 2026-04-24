@@ -6,10 +6,10 @@ qui reproduit la structure d'une vraie réponse PRIM.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from shared.schemas import TransportMode
 
 from ingestion.transformers.prim_transformer import (
     _extract_value,
@@ -17,7 +17,6 @@ from ingestion.transformers.prim_transformer import (
     _parse_transport_mode,
     parse_stop_monitoring_response,
 )
-from shared.schemas import TransportMode
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
