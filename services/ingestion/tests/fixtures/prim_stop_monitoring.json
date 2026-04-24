@@ -65,6 +65,34 @@
                   "ArrivalStatus": "onTime"
                 }
               }
+            },
+            {
+              "RecordedAtTime": "2026-04-24T10:00:00Z",
+              "ItemIdentifier": "TRANSDEV:Item::uid-4:",
+              "MonitoringRef": {"value": "STIF:StopArea:SP:71517:"},
+              "MonitoredVehicleJourney": {
+                "LineRef": {"value": "STIF:Line::C01850:"},
+                "DestinationName": [{"value": "Pont de Bezons"}],
+                "MonitoredCall": {
+                  "StopPointName": [{"value": "La Défense"}],
+                  "AimedDepartureTime": "2026-04-24T10:12:00Z",
+                  "ExpectedDepartureTime": "2026-04-24T10:15:00Z",
+                  "DepartureStatus": "delayed"
+                }
+              }
+            },
+            {
+              "RecordedAtTime": "2026-04-24T10:00:00Z",
+              "ItemIdentifier": "IDFM:Item::uid-5:",
+              "MonitoringRef": {"value": "STIF:StopArea:SP:71517:"},
+              "MonitoredVehicleJourney": {
+                "LineRef": {"value": "STIF:Line::C01999:"},
+                "DestinationName": [{"value": "Musée d'Orsay"}],
+                "MonitoredCall": {
+                  "StopPointName": [{"value": "La Défense"}],
+                  "DepartureStatus": "onTime"
+                }
+              }
             }
           ]
         }

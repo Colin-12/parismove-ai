@@ -39,18 +39,31 @@ class StopVisit(BaseModel):
     )
 
     # Métadonnées ligne
-    line_name: str | None = None
+    line_name: str | None = Field(
+        default=None,
+        description="Nom d'affichage (ex: '1', 'RER A', 'T2', '38')",
+    )
+    operator: str | None = Field(
+        default=None, description="Opérateur : RATP, SNCF, Transdev..."
+    )
     direction: str | None = Field(
         default=None, description="Nom de la destination affichée"
     )
     transport_mode: TransportMode = TransportMode.UNKNOWN
 
-    # Horaires
+    # Horaires : on stocke à la fois arrivée et départ car selon l'opérateur
+    # PRIM renvoie parfois seulement l'un ou l'autre.
     aimed_arrival: datetime | None = Field(
-        default=None, description="Horaire théorique planifié"
+        default=None, description="Arrivée théorique planifiée"
     )
     expected_arrival: datetime | None = Field(
-        default=None, description="Horaire prévu, révisé en temps réel"
+        default=None, description="Arrivée prévue, révisée en temps réel"
+    )
+    aimed_departure: datetime | None = Field(
+        default=None, description="Départ théorique planifié"
+    )
+    expected_departure: datetime | None = Field(
+        default=None, description="Départ prévu, révisé en temps réel"
     )
 
     # Qualité de la donnée
@@ -58,6 +71,7 @@ class StopVisit(BaseModel):
         default=None,
         description="onTime / delayed / cancelled / missed / arrived",
     )
+    departure_status: str | None = Field(default=None)
 
     # Traçabilité
     recorded_at: datetime = Field(
@@ -66,11 +80,33 @@ class StopVisit(BaseModel):
     source: str = Field(default="prim", description="Source de la donnée")
 
     @property
+    def best_time(self) -> datetime | None:
+        """Retourne le meilleur horaire disponible (prévu > théorique, arrivée > départ).
+
+        Ordre de priorité :
+            1. expected_arrival (la plus précise pour un voyageur)
+            2. expected_departure
+            3. aimed_arrival
+            4. aimed_departure
+        """
+        return (
+            self.expected_arrival
+            or self.expected_departure
+            or self.aimed_arrival
+            or self.aimed_departure
+        )
+
+    @property
     def delay_seconds(self) -> int | None:
         """Retard en secondes (positif = en retard, négatif = en avance).
 
-        Retourne None si l'un des deux horaires est absent.
+        Utilise en priorité la paire arrivée, sinon la paire départ.
+        Retourne None si aucune paire comparable n'est disponible.
         """
-        if self.aimed_arrival is None or self.expected_arrival is None:
-            return None
-        return int((self.expected_arrival - self.aimed_arrival).total_seconds())
+        if self.aimed_arrival is not None and self.expected_arrival is not None:
+            return int((self.expected_arrival - self.aimed_arrival).total_seconds())
+        if self.aimed_departure is not None and self.expected_departure is not None:
+            return int(
+                (self.expected_departure - self.aimed_departure).total_seconds()
+            )
+        return None
