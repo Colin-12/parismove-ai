@@ -19,7 +19,6 @@ from typing import Any
 
 from shared.schemas import StopVisit, TransportMode
 
-
 # Préfixes d'identifiants de ligne connus, pour déduire le mode de transport
 # quand l'API ne renvoie pas explicitement VehicleMode.
 # Exemples de LineRef : STIF:Line::C01371: (métro 1), STIF:Line::C01742: (RER B)

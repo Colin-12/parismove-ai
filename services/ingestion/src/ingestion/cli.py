@@ -19,11 +19,11 @@ from typing import Any
 
 import click
 import httpx
+from shared.schemas import StopVisit
 
 from ingestion.clients.prim import PrimClient
 from ingestion.config import get_settings
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
-from shared.schemas import StopVisit
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ async def _run_prim(
 
 async def _fetch_raw(client: PrimClient, stop_id: str) -> dict[str, Any]:
     """Version bas-niveau qui retourne le JSON brut, utilisée pour --save-raw."""
-    return await client._fetch(  # noqa: SLF001 (accès intentionnel)
+    return await client._fetch(
         client.STOP_MONITORING_PATH, {"MonitoringRef": stop_id}
     )
 

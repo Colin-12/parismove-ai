@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+from shared.schemas import TransportMode
 
 from ingestion.transformers.prim_transformer import (
     _extract_value,
@@ -17,7 +18,6 @@ from ingestion.transformers.prim_transformer import (
     _short_line_code,
     parse_stop_monitoring_response,
 )
-from shared.schemas import TransportMode
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
