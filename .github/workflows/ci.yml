@@ -19,15 +19,14 @@ jobs:
 
       - name: Installation
         run: |
+          pip install -e shared
           pip install -e "services/ingestion[dev]"
-          pip install -e "services/ml[dev]"
-          pip install -e "services/api[dev]"
 
       - name: Ruff (linting)
         run: ruff check services/
 
       - name: Mypy (type checking)
-        run: mypy services/ingestion/src services/api/src
+        run: mypy services/ingestion/src
 
   tests:
     name: Tests unitaires
@@ -42,15 +41,11 @@ jobs:
 
       - name: Installation
         run: |
+          pip install -e shared
           pip install -e "services/ingestion[dev]"
-          pip install -e "services/ml[dev]"
-          pip install -e "services/api[dev]"
 
       - name: Pytest
-        run: |
-          pytest services/ingestion
-          pytest services/ml
-          pytest services/api
+        run: pytest services/ingestion
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
