@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         description="URL de base de l'API PRIM",
     )
 
+    # AQICN (qualité de l'air)
+    aqicn_token: str = Field(default="", description="Token AQICN")
+
     # Base de données
     database_url: str = Field(
         default="", description="URL PostgreSQL (Supabase)"
