@@ -1,0 +1,35 @@
+{
+  "status": "ok",
+  "data": {
+    "aqi": 42,
+    "idx": 5722,
+    "attributions": [
+      {"url": "http://www.airparif.asso.fr/", "name": "Airparif"},
+      {"url": "https://waqi.info/", "name": "World Air Quality Index Project"}
+    ],
+    "city": {
+      "geo": [48.8919, 2.3796],
+      "name": "Aubervilliers, France",
+      "url": "https://aqicn.org/city/france/aubervilliers"
+    },
+    "dominentpol": "no2",
+    "iaqi": {
+      "co": {"v": 1.8},
+      "h": {"v": 65},
+      "no2": {"v": 21.2},
+      "o3": {"v": 18.4},
+      "p": {"v": 1014.5},
+      "pm10": {"v": 22},
+      "pm25": {"v": 42},
+      "so2": {"v": 0.5},
+      "t": {"v": 14.8},
+      "w": {"v": 3.1}
+    },
+    "time": {
+      "iso": "2026-04-27T14:00:00+02:00",
+      "s": "2026-04-27 14:00:00",
+      "tz": "+02:00",
+      "v": 1745762400
+    }
+  }
+}

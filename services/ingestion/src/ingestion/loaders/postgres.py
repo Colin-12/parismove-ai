@@ -2,8 +2,7 @@
 
 Principe :
     * Prend une `list[StopVisit]` et l'insère en batch dans la table `stop_visits`.
-    * Utilise un UPSERT (INSERT ... ON CONFLICT DO NOTHING) pour être idempotent :
-      si le cron rejoue le même batch, aucune erreur, aucun doublon.
+    * Utilise un UPSERT (INSERT ... ON CONFLICT DO NOTHING) pour être idempotent.
     * Calcule et stocke `delay_seconds` côté Python (plus lisible que SQL).
 """
 from __future__ import annotations
@@ -21,8 +20,8 @@ logger = logging.getLogger(__name__)
 class LoadResult(TypedDict):
     """Résumé d'une opération de chargement."""
 
-    total: int          # Nombre de StopVisit reçus
-    inserted: int       # Nombre réellement insérés (hors doublons)
+    total: int
+    inserted: int
 
 
 _INSERT_SQL = text(
@@ -82,7 +81,7 @@ def load_stop_visits(
     stop/line/journey/recorded_at), elle est ignorée silencieusement.
 
     Args:
-        engine: engine SQLAlchemy (voir `shared.db.create_database_engine`).
+        engine: engine SQLAlchemy.
         visits: itérable de `StopVisit` à insérer.
 
     Returns:
