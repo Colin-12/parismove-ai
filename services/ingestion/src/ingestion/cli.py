@@ -31,9 +31,18 @@ from ingestion.transformers.prim_transformer import parse_stop_monitoring_respon
 logger = logging.getLogger(__name__)
 
 DEFAULT_STOPS = [
-    "STIF:StopArea:SP:71517:",  # La Défense (RER A + métro 1 + bus + tram)
-    "STIF:StopArea:SP:42587:",  # Châtelet (métro 1, 4, 7, 11, 14)
-    "STIF:StopArea:SP:71264:",  # Châtelet - Les Halles (zone multimodale)
+    # Hubs majeurs Paris intra-muros
+    "STIF:StopArea:SP:71517:",  # La Défense (RER A + M1 + T2 + bus)
+    "STIF:StopArea:SP:42587:",  # Châtelet (M1, M4, M7, M11, M14)
+    "STIF:StopArea:SP:71264:",  # Châtelet - Les Halles (multimodal)
+    "STIF:StopArea:SP:43135:",  # Gare du Nord (RER B/D + Eurostar + Transilien)
+    "STIF:StopArea:SP:43136:",  # Gare Saint-Lazare (Transilien J/L)
+    "STIF:StopArea:SP:43122:",  # Gare de Lyon (RER A/D + Transilien)
+    "STIF:StopArea:SP:43124:",  # Montparnasse (Transilien N + métros)
+    "STIF:StopArea:SP:71061:",  # Nation (M1, M2, M6, M9 + RER A)
+    # Banlieue significative pour la diversité ML
+    "STIF:StopArea:SP:43185:",  # Versailles Château Rive Gauche (RER C)
+    "STIF:StopArea:SP:411160:", # Saint-Denis (RER B/D + T1 + T8)
 ]
 
 FIXTURES_DIR = (
