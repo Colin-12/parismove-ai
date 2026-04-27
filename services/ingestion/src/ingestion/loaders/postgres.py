@@ -1,8 +1,9 @@
-"""Loader PostgreSQL pour `StopVisit` et `AirMeasurement`.
+"""Loader PostgreSQL pour les `StopVisit`.
 
 Principe :
-    * Insert en batch idempotent (INSERT ... ON CONFLICT DO NOTHING).
-    * Calcule les champs dérivés côté Python (delay_seconds).
+    * Prend une `list[StopVisit]` et l'insère en batch dans la table `stop_visits`.
+    * Utilise un UPSERT (INSERT ... ON CONFLICT DO NOTHING) pour être idempotent.
+    * Calcule et stocke `delay_seconds` côté Python (plus lisible que SQL).
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import logging
 from collections.abc import Iterable
 from typing import TypedDict
 
-from shared.schemas import AirMeasurement, StopVisit
+from shared.schemas import StopVisit
 from sqlalchemy import Engine, text
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,7 @@ class LoadResult(TypedDict):
     inserted: int
 
 
-# ============================================================================
-#  STOP VISITS
-# ============================================================================
-
-_INSERT_VISITS_SQL = text(
+_INSERT_SQL = text(
     """
     INSERT INTO stop_visits (
         stop_id, line_id, vehicle_journey_id,
@@ -78,7 +75,18 @@ def _visit_to_row(visit: StopVisit) -> dict[str, object | None]:
 def load_stop_visits(
     engine: Engine, visits: Iterable[StopVisit]
 ) -> LoadResult:
-    """Insère une liste de StopVisit dans la table `stop_visits`."""
+    """Insère une liste de StopVisit dans la table `stop_visits`.
+
+    L'insertion est idempotente : si une visite existe déjà (même
+    stop/line/journey/recorded_at), elle est ignorée silencieusement.
+
+    Args:
+        engine: engine SQLAlchemy.
+        visits: itérable de `StopVisit` à insérer.
+
+    Returns:
+        LoadResult avec total reçu et nombre réellement inséré.
+    """
     rows = [_visit_to_row(v) for v in visits]
     total = len(rows)
 
@@ -86,85 +94,12 @@ def load_stop_visits(
         return {"total": 0, "inserted": 0}
 
     with engine.begin() as conn:
-        result = conn.execute(_INSERT_VISITS_SQL, rows)
+        result = conn.execute(_INSERT_SQL, rows)
         inserted = result.rowcount if result.rowcount is not None else 0
 
     logger.info(
         "stop_visits_loaded",
         extra={"total": total, "inserted": inserted},
     )
-    return {"total": total, "inserted": inserted}
 
-
-# ============================================================================
-#  AIR MEASUREMENTS
-# ============================================================================
-
-_INSERT_AIR_SQL = text(
-    """
-    INSERT INTO air_measurements (
-        station_id, station_name,
-        latitude, longitude, city,
-        aqi, dominant_pollutant,
-        pm25, pm10, no2, o3, so2, co,
-        temperature_c, humidity_pct, pressure_hpa,
-        measured_at, recorded_at, source
-    )
-    VALUES (
-        :station_id, :station_name,
-        :latitude, :longitude, :city,
-        :aqi, :dominant_pollutant,
-        :pm25, :pm10, :no2, :o3, :so2, :co,
-        :temperature_c, :humidity_pct, :pressure_hpa,
-        :measured_at, :recorded_at, :source
-    )
-    ON CONFLICT (station_id, measured_at, source)
-    DO NOTHING
-    """
-)
-
-
-def _air_to_row(measurement: AirMeasurement) -> dict[str, object | None]:
-    """Convertit un AirMeasurement en dict de paramètres pour l'INSERT."""
-    return {
-        "station_id": measurement.station_id,
-        "station_name": measurement.station_name,
-        "latitude": measurement.latitude,
-        "longitude": measurement.longitude,
-        "city": measurement.city,
-        "aqi": measurement.aqi,
-        "dominant_pollutant": measurement.dominant_pollutant,
-        "pm25": measurement.pm25,
-        "pm10": measurement.pm10,
-        "no2": measurement.no2,
-        "o3": measurement.o3,
-        "so2": measurement.so2,
-        "co": measurement.co,
-        "temperature_c": measurement.temperature_c,
-        "humidity_pct": measurement.humidity_pct,
-        "pressure_hpa": measurement.pressure_hpa,
-        "measured_at": measurement.measured_at,
-        "recorded_at": measurement.recorded_at,
-        "source": measurement.source,
-    }
-
-
-def load_air_measurements(
-    engine: Engine, measurements: Iterable[AirMeasurement]
-) -> LoadResult:
-    """Insère une liste de mesures de qualité de l'air."""
-    rows = [_air_to_row(m) for m in measurements]
-    total = len(rows)
-
-    if total == 0:
-        return {"total": 0, "inserted": 0}
-
-    with engine.begin() as conn:
-        result = conn.execute(_INSERT_AIR_SQL, rows)
-        inserted = result.rowcount if result.rowcount is not None else 0
-
-    logger.info(
-        "air_measurements_loaded",
-        extra={"total": total, "inserted": inserted},
-    )
     return {"total": total, "inserted": inserted}
