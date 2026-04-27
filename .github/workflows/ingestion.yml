@@ -6,7 +6,7 @@ name: Ingestion planifiée
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # toutes les 15 minutes
+    - cron: "*/30 * * * *"   # toutes les 30 minutes
   workflow_dispatch:          # permet le déclenchement manuel
     inputs:
       source:
