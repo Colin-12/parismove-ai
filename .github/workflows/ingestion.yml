@@ -6,8 +6,6 @@ name: Ingestion planifiée
 
 on:
   schedule:
-    # Toutes les 30 minutes. GitHub free tier ne tient pas un cron à 15 min de
-    # manière fiable (high-load delays), 30 min donne un rythme plus régulier.
     - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
@@ -51,7 +49,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Ingestion Open-Meteo
-        if: false  # TODO: activer quand le client Open-Meteo sera implémenté
+        if: ${{ inputs.source == 'meteo' || inputs.source == 'all' || github.event_name == 'schedule' }}
         run: python -m ingestion.cli run --source meteo --store
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
