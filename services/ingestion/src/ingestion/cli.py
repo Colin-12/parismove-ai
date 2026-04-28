@@ -5,6 +5,7 @@ Usage:
     python -m ingestion.cli run --source aqicn --store
     python -m ingestion.cli run --source meteo --store
     python -m ingestion.cli run --source all --store
+    python -m ingestion.cli refresh-references
 """
 from __future__ import annotations
 
@@ -30,12 +31,12 @@ from ingestion.loaders import (
     load_stop_visits,
     load_weather_observations,
 )
+from ingestion.reference import fetch_idfm_lines, upsert_idfm_lines
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_STOPS = [
-    # Hubs majeurs Paris intra-muros
     "STIF:StopArea:SP:71517:",  # La Défense
     "STIF:StopArea:SP:42587:",  # Châtelet
     "STIF:StopArea:SP:71264:",  # Châtelet - Les Halles
@@ -44,7 +45,6 @@ DEFAULT_STOPS = [
     "STIF:StopArea:SP:43122:",  # Gare de Lyon
     "STIF:StopArea:SP:43124:",  # Montparnasse
     "STIF:StopArea:SP:71061:",  # Nation
-    # Banlieue
     "STIF:StopArea:SP:43185:",  # Versailles Château Rive Gauche
     "STIF:StopArea:SP:411160:", # Saint-Denis
 ]
@@ -56,9 +56,7 @@ DEFAULT_AQICN_STATIONS = [
     "@5708",   # Versailles
 ]
 
-# Points météo : 10 points couvrant centre + petite couronne + grande couronne IDF
 DEFAULT_METEO_POINTS: list[tuple[str, str, float, float]] = [
-    # (point_id, point_name, latitude, longitude)
     ("paris-centre",    "Paris centre (Châtelet)",  48.8566, 2.3522),
     ("la-defense",      "La Défense",                48.8918, 2.2389),
     ("saint-denis",     "Saint-Denis",               48.9362, 2.3574),
@@ -209,7 +207,7 @@ def _display_visits(visits: list[StopVisit], limit: int | None) -> None:
 async def _run_aqicn(stations: list[str], store: bool) -> None:
     settings = get_settings()
     if not settings.aqicn_token:
-        click.echo("❌ AQICN_TOKEN manquant. Renseigne-le dans .env.", err=True)
+        click.echo("❌ AQICN_TOKEN manquant.", err=True)
         sys.exit(1)
 
     measurements: list[AirMeasurement] = []
@@ -220,7 +218,7 @@ async def _run_aqicn(stations: list[str], store: bool) -> None:
             try:
                 m = await client.get_station(station_id)
                 if m is None:
-                    click.echo("  Données indisponibles ou dégradées.")
+                    click.echo("  Données indisponibles.")
                     continue
                 _display_measurement(m)
                 measurements.append(m)
@@ -353,6 +351,42 @@ def _store_observations(observations: list[WeatherObservation]) -> None:
 
 
 # ============================================================
+# Référentiel IDFM
+# ============================================================
+
+
+async def _run_refresh_references() -> None:
+    """Télécharge le référentiel IDFM et le stocke en base."""
+    settings = get_settings()
+    if not settings.database_url:
+        click.echo("❌ DATABASE_URL manquante.", err=True)
+        sys.exit(1)
+
+    click.echo("📥 Téléchargement du référentiel des lignes IDFM...")
+    rows = await fetch_idfm_lines()
+    click.echo(f"   {len(rows)} lignes récupérées.")
+
+    click.echo("💾 Stockage en base (UPSERT)...")
+    engine = create_database_engine(settings.database_url)
+    try:
+        count = upsert_idfm_lines(engine, rows)
+    finally:
+        engine.dispose()
+
+    click.echo(f"   {count} lignes traitées.")
+
+    # Affiche un échantillon pour vérifier visuellement
+    sample = rows[:5]
+    click.echo("\n📋 Échantillon :")
+    for row in sample:
+        click.echo(
+            f"   {row['short_name'] or '?':10} "
+            f"({row['transport_mode'] or '?':10}) "
+            f"{row['long_name']}"
+        )
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -403,7 +437,7 @@ def run(
     save_raw: Path | None,
     store: bool,
 ) -> None:
-    """Exécute un job d'ingestion."""
+    """Exécute un job d'ingestion (PRIM, AQICN, Open-Meteo)."""
     display_limit = None if limit == 0 else limit
 
     if source == "prim":
@@ -422,6 +456,15 @@ def run(
         asyncio.run(_run_prim(stop_ids, mock, display_limit, save_raw, store))
         asyncio.run(_run_aqicn(station_ids, store))
         asyncio.run(_run_meteo(DEFAULT_METEO_POINTS, store))
+
+
+@main.command("refresh-references")
+def refresh_references() -> None:
+    """Télécharge le référentiel IDFM des lignes et l'upsert en BDD.
+
+    À exécuter ponctuellement (mensuellement, ou après changement IDFM).
+    """
+    asyncio.run(_run_refresh_references())
 
 
 if __name__ == "__main__":

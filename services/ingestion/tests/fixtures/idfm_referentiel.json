@@ -1,0 +1,57 @@
+{
+  "total_count": 4,
+  "results": [
+    {
+      "id_line": "C01390",
+      "shortname_line": "T2",
+      "name_line": "Tramway T2",
+      "transportmode": "tram",
+      "transportsubmode": null,
+      "type": "TRAM",
+      "networkname": "RATP",
+      "operatorname": "RATP",
+      "colourweb_hexa": "7B388C",
+      "textcolourweb_hexa": "FFFFFF",
+      "status": "active",
+      "accessibility": "yes"
+    },
+    {
+      "id_line": "C01371",
+      "shortname_line": "1",
+      "name_line": "Métro ligne 1",
+      "transportmode": "metro",
+      "transportsubmode": null,
+      "networkname": "RATP",
+      "operatorname": "RATP",
+      "colourweb_hexa": "FFCD00",
+      "textcolourweb_hexa": "000000",
+      "status": "active",
+      "accessibility": "yes"
+    },
+    {
+      "id_line": "C01742",
+      "shortname_line": "RER B",
+      "name_line": "RER B",
+      "transportmode": "rail",
+      "transportsubmode": "regionalRail",
+      "networkname": "RATP",
+      "operatorname": "RATP / SNCF",
+      "colourweb_hexa": "4A90E2",
+      "textcolourweb_hexa": "FFFFFF",
+      "status": "active",
+      "accessibility": "partial"
+    },
+    {
+      "id_line": "",
+      "shortname_line": "BROKEN",
+      "name_line": "Cas d'erreur (id manquant)",
+      "transportmode": "bus",
+      "networkname": null,
+      "operatorname": null,
+      "colourweb_hexa": null,
+      "textcolourweb_hexa": null,
+      "status": "active",
+      "accessibility": null
+    }
+  ]
+}
