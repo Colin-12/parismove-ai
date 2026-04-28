@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 # Seuils OMS 2021 pour PM2.5 (moyenne 24h en µg/m³)
 # https://www.who.int/news-room/feature-stories/detail/what-are-the-who-air-quality-guidelines
-PM25_THRESHOLDS = [
+PM25_THRESHOLDS: list[tuple[float, float, float]] = [
     (0, 5, 100),      # OMS guideline = excellent
     (5, 15, 80),      # Acceptable
     (15, 25, 60),     # Modéré
@@ -31,7 +31,7 @@ PM25_THRESHOLDS = [
 ]
 
 # Seuils OMS 2021 pour NO2 (moyenne 24h en µg/m³)
-NO2_THRESHOLDS = [
+NO2_THRESHOLDS: list[tuple[float, float, float]] = [
     (0, 10, 100),
     (10, 25, 80),
     (25, 50, 60),
@@ -41,7 +41,7 @@ NO2_THRESHOLDS = [
 ]
 
 # Seuils US AQI (US EPA)
-AQI_THRESHOLDS = [
+AQI_THRESHOLDS: list[tuple[float, float, float]] = [
     (0, 50, 100),     # Good
     (50, 100, 75),    # Moderate
     (100, 150, 50),   # Unhealthy for sensitive
@@ -49,7 +49,6 @@ AQI_THRESHOLDS = [
     (200, 300, 15),   # Very unhealthy
     (300, 999, 0),    # Hazardous
 ]
-
 
 @dataclass(frozen=True)
 class PollutionInputs:
