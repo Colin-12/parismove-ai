@@ -1,0 +1,42 @@
+{
+  "status": "ok",
+  "data": {
+    "aqi": 42,
+    "idx": 5722,
+    "attributions": [
+      {
+        "url": "http://airparif.fr/",
+        "name": "Airparif - Air quality observatory in Île-de-France region",
+        "logo": "France-Airparif.png"
+      }
+    ],
+    "city": {
+      "geo": [48.8589, 2.3469],
+      "name": "Paris",
+      "url": "https://aqicn.org/city/paris/",
+      "location": ""
+    },
+    "dominentpol": "pm25",
+    "iaqi": {
+      "co": {"v": 2.5},
+      "h":  {"v": 67},
+      "no2": {"v": 12.4},
+      "o3": {"v": 35},
+      "p":  {"v": 1015.2},
+      "pm10": {"v": 28},
+      "pm25": {"v": 42},
+      "so2": {"v": 0.5},
+      "t":  {"v": 18.3},
+      "w":  {"v": 3.2},
+      "wg": {"v": 5.1}
+    },
+    "time": {
+      "s": "2026-04-26 16:00:00",
+      "tz": "+02:00",
+      "v": 1745683200,
+      "iso": "2026-04-26T16:00:00+02:00"
+    },
+    "forecast": {},
+    "debug": {"sync": "2026-04-26T16:30:00+09:00"}
+  }
+}

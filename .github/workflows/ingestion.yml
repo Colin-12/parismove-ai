@@ -1,13 +1,13 @@
 name: Ingestion planifiée
 
-# Exécute le pipeline d'ingestion toutes les 15 minutes.
+# Exécute le pipeline d'ingestion toutes les 30 minutes.
 # Utilise les secrets GitHub pour les clés API.
 # Coût : 0 € (dans les 2000 minutes/mois gratuites).
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # toutes les 15 minutes
-  workflow_dispatch:          # permet le déclenchement manuel
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
     inputs:
       source:
         description: "Source à ingérer (prim, aqicn, meteo, all)"
@@ -42,14 +42,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Ingestion AQICN
-        if: false  # TODO: activer quand le client AQICN sera implémenté
+        if: ${{ inputs.source == 'aqicn' || inputs.source == 'all' || github.event_name == 'schedule' }}
         run: python -m ingestion.cli run --source aqicn --store
         env:
           AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Ingestion Open-Meteo
-        if: false  # TODO: activer quand le client Open-Meteo sera implémenté
+        if: ${{ inputs.source == 'meteo' || inputs.source == 'all' || github.event_name == 'schedule' }}
         run: python -m ingestion.cli run --source meteo --store
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
