@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parismove-coach"
+version = "0.1.0"
+description = "Coach mobilité conversationnel basé sur les données ParisMove AI"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "groq>=0.11",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0",
+    "parismove-shared",
+    "parismove-healthscore",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+coach = "coach.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=coach --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
