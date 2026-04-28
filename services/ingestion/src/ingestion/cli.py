@@ -1,14 +1,10 @@
 """CLI pour lancer les jobs d'ingestion.
 
 Usage:
-    python -m ingestion.cli run --source prim
-    python -m ingestion.cli run --source prim --stop STIF:StopArea:SP:71517:
-    python -m ingestion.cli run --source prim --mock
-    python -m ingestion.cli run --source prim --limit 10
-    python -m ingestion.cli run --source prim --save-raw data/raw/
     python -m ingestion.cli run --source prim --store
     python -m ingestion.cli run --source aqicn --store
-    python -m ingestion.cli run --source aqicn --station @5722
+    python -m ingestion.cli run --source meteo --store
+    python -m ingestion.cli run --source all --store
 """
 from __future__ import annotations
 
@@ -23,38 +19,56 @@ from typing import Any
 import click
 import httpx
 from shared.db import create_database_engine
-from shared.schemas import AirMeasurement, StopVisit
+from shared.schemas import AirMeasurement, StopVisit, WeatherObservation
 
 from ingestion.clients.aqicn import AqicnClient
+from ingestion.clients.meteo import OpenMeteoClient
 from ingestion.clients.prim import PrimClient
 from ingestion.config import get_settings
-from ingestion.loaders import load_air_measurements, load_stop_visits
+from ingestion.loaders import (
+    load_air_measurements,
+    load_stop_visits,
+    load_weather_observations,
+)
 from ingestion.transformers.prim_transformer import parse_stop_monitoring_response
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_STOPS = [
     # Hubs majeurs Paris intra-muros
-    "STIF:StopArea:SP:71517:",  # La Défense (RER A + M1 + T2 + bus)
-    "STIF:StopArea:SP:42587:",  # Châtelet (M1, M4, M7, M11, M14)
-    "STIF:StopArea:SP:71264:",  # Châtelet - Les Halles (multimodal)
-    "STIF:StopArea:SP:43135:",  # Gare du Nord (RER B/D + Eurostar + Transilien)
-    "STIF:StopArea:SP:43136:",  # Gare Saint-Lazare (Transilien J/L)
-    "STIF:StopArea:SP:43122:",  # Gare de Lyon (RER A/D + Transilien)
-    "STIF:StopArea:SP:43124:",  # Montparnasse (Transilien N + métros)
-    "STIF:StopArea:SP:71061:",  # Nation (M1, M2, M6, M9 + RER A)
-    # Banlieue significative pour la diversité ML
-    "STIF:StopArea:SP:43185:",  # Versailles Château Rive Gauche (RER C)
-    "STIF:StopArea:SP:411160:", # Saint-Denis (RER B/D + T1 + T8)
+    "STIF:StopArea:SP:71517:",  # La Défense
+    "STIF:StopArea:SP:42587:",  # Châtelet
+    "STIF:StopArea:SP:71264:",  # Châtelet - Les Halles
+    "STIF:StopArea:SP:43135:",  # Gare du Nord
+    "STIF:StopArea:SP:43136:",  # Gare Saint-Lazare
+    "STIF:StopArea:SP:43122:",  # Gare de Lyon
+    "STIF:StopArea:SP:43124:",  # Montparnasse
+    "STIF:StopArea:SP:71061:",  # Nation
+    # Banlieue
+    "STIF:StopArea:SP:43185:",  # Versailles Château Rive Gauche
+    "STIF:StopArea:SP:411160:", # Saint-Denis
 ]
 
-# Stations AQICN par défaut. IDs vérifiés via aqicn.org/city/<slug>.
-# 4 zones distinctes pour avoir une diversité spatiale (centre, ouest, nord, sud-ouest).
 DEFAULT_AQICN_STATIONS = [
-    "@5722",   # Paris 18e (Aubervilliers) - zone Nord
-    "@5724",   # Paris centre (Les Halles)
-    "@13109",  # La Défense - zone Ouest business
-    "@5708",   # Versailles - zone banlieue résidentielle
+    "@5722",   # Paris 18e (Aubervilliers)
+    "@5724",   # Paris centre
+    "@13109",  # La Défense
+    "@5708",   # Versailles
+]
+
+# Points météo : 10 points couvrant centre + petite couronne + grande couronne IDF
+DEFAULT_METEO_POINTS: list[tuple[str, str, float, float]] = [
+    # (point_id, point_name, latitude, longitude)
+    ("paris-centre",    "Paris centre (Châtelet)",  48.8566, 2.3522),
+    ("la-defense",      "La Défense",                48.8918, 2.2389),
+    ("saint-denis",     "Saint-Denis",               48.9362, 2.3574),
+    ("versailles",      "Versailles",                48.8044, 2.1232),
+    ("creteil",         "Créteil",                   48.7800, 2.4655),
+    ("boulogne",        "Boulogne-Billancourt",      48.8350, 2.2410),
+    ("vitry",           "Vitry-sur-Seine",           48.7872, 2.4023),
+    ("argenteuil",      "Argenteuil",                48.9472, 2.2498),
+    ("cergy",           "Cergy (grande couronne O)", 49.0388, 2.0780),
+    ("melun",           "Melun (grande couronne SE)",48.5403, 2.6605),
 ]
 
 FIXTURES_DIR = (
@@ -65,7 +79,6 @@ FIXTURES_DIR = (
 def _save_raw_response(
     raw: dict[str, Any], stop_id: str, output_dir: Path
 ) -> Path:
-    """Sauvegarde une réponse PRIM brute en JSON horodaté."""
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_stop = stop_id.replace(":", "_").strip("_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -89,7 +102,6 @@ async def _run_prim(
     save_raw: Path | None,
     store: bool,
 ) -> None:
-    """Récupère les prochains passages pour une liste d'arrêts."""
     all_visits: list[StopVisit] = []
 
     if use_mock:
@@ -195,14 +207,9 @@ def _display_visits(visits: list[StopVisit], limit: int | None) -> None:
 
 
 async def _run_aqicn(stations: list[str], store: bool) -> None:
-    """Récupère la qualité de l'air pour une liste de stations."""
     settings = get_settings()
     if not settings.aqicn_token:
-        click.echo(
-            "❌ AQICN_TOKEN manquant. Renseigne-le dans .env "
-            "(token gratuit sur https://aqicn.org/data-platform/token/).",
-            err=True,
-        )
+        click.echo("❌ AQICN_TOKEN manquant. Renseigne-le dans .env.", err=True)
         sys.exit(1)
 
     measurements: list[AirMeasurement] = []
@@ -225,7 +232,6 @@ async def _run_aqicn(stations: list[str], store: bool) -> None:
 
 
 def _display_measurement(m: AirMeasurement) -> None:
-    """Affiche une mesure de qualité de l'air dans le terminal."""
     pollutants = []
     if m.pm25 is not None:
         pollutants.append(f"PM2.5={m.pm25:.0f}")
@@ -272,6 +278,81 @@ def _store_measurements(measurements: list[AirMeasurement]) -> None:
 
 
 # ============================================================
+# Open-Meteo
+# ============================================================
+
+
+async def _run_meteo(
+    points: list[tuple[str, str, float, float]], store: bool
+) -> None:
+    observations: list[WeatherObservation] = []
+
+    async with OpenMeteoClient() as client:
+        for point_id, point_name, lat, lon in points:
+            click.echo(f"\n→ Point {point_name} ({lat:.4f}, {lon:.4f})")
+            try:
+                obs = await client.get_observation(lat, lon, point_id, point_name)
+                if obs is None:
+                    click.echo("  Données indisponibles.")
+                    continue
+                _display_observation(obs)
+                observations.append(obs)
+            except httpx.HTTPError as exc:
+                click.echo(f"  ❌ Erreur réseau : {exc}", err=True)
+
+    if store and observations:
+        _store_observations(observations)
+
+
+def _display_observation(obs: WeatherObservation) -> None:
+    parts = []
+    if obs.temperature_c is not None:
+        parts.append(f"{obs.temperature_c:.1f}°C")
+    if obs.humidity_pct is not None:
+        parts.append(f"{obs.humidity_pct:.0f}%RH")
+    if obs.wind_speed_ms is not None:
+        parts.append(f"vent {obs.wind_speed_ms:.1f}m/s")
+    if obs.precipitation_mm is not None:
+        parts.append(f"pluie {obs.precipitation_mm:.1f}mm")
+    if obs.cloud_cover_pct is not None:
+        parts.append(f"nuages {obs.cloud_cover_pct:.0f}%")
+
+    click.echo(f"  météo: {' · '.join(parts) if parts else '—'}")
+
+    air_parts = []
+    if obs.aqi_european is not None:
+        air_parts.append(f"EAQI {obs.aqi_european:.0f}")
+    if obs.pm25 is not None:
+        air_parts.append(f"PM2.5={obs.pm25:.0f}")
+    if obs.no2 is not None:
+        air_parts.append(f"NO2={obs.no2:.0f}")
+    if obs.uv_index is not None:
+        air_parts.append(f"UV {obs.uv_index:.1f}")
+
+    if air_parts:
+        click.echo(f"  air:   {' · '.join(air_parts)}")
+
+
+def _store_observations(observations: list[WeatherObservation]) -> None:
+    settings = get_settings()
+    if not settings.database_url:
+        click.echo("❌ DATABASE_URL manquante.", err=True)
+        sys.exit(1)
+
+    click.echo(f"\n💾 Stockage de {len(observations)} observations en base...")
+    engine = create_database_engine(settings.database_url)
+    try:
+        result = load_weather_observations(engine, observations)
+    finally:
+        engine.dispose()
+
+    click.echo(
+        f"   {result['inserted']} nouvelles observations insérées "
+        f"({result['total'] - result['inserted']} doublons ignorés)."
+    )
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -300,18 +381,18 @@ def main(log_level: str) -> None:
     multiple=True,
     help="ID de station AQICN (répétable, ex: @5722).",
 )
-@click.option("--mock", is_flag=True, help="Utilise une fixture locale (PRIM uniquement).")
-@click.option("--limit", type=int, default=15, help="Nb max de passages affichés (PRIM).")
+@click.option("--mock", is_flag=True, help="Fixture locale (PRIM uniquement).")
+@click.option("--limit", type=int, default=15, help="Nb max passages affichés (PRIM).")
 @click.option(
     "--save-raw",
     type=click.Path(path_type=Path),
     default=None,
-    help="Sauvegarde les réponses brutes dans ce dossier (PRIM uniquement).",
+    help="Sauvegarde des réponses brutes (PRIM uniquement).",
 )
 @click.option(
     "--store",
     is_flag=True,
-    help="Stocke les données captées dans la BDD (DATABASE_URL requise).",
+    help="Stocke les données captées en BDD (DATABASE_URL requise).",
 )
 def run(
     source: str,
@@ -328,34 +409,19 @@ def run(
     if source == "prim":
         stop_ids = list(stops) if stops else DEFAULT_STOPS
         asyncio.run(
-            _run_prim(
-                stop_ids,
-                use_mock=mock,
-                limit=display_limit,
-                save_raw=save_raw,
-                store=store,
-            )
+            _run_prim(stop_ids, mock, display_limit, save_raw, store)
         )
     elif source == "aqicn":
         station_ids = list(stations) if stations else DEFAULT_AQICN_STATIONS
-        asyncio.run(_run_aqicn(station_ids, store=store))
+        asyncio.run(_run_aqicn(station_ids, store))
+    elif source == "meteo":
+        asyncio.run(_run_meteo(DEFAULT_METEO_POINTS, store))
     elif source == "all":
-        # Lance PRIM puis AQICN dans la foulée
         stop_ids = list(stops) if stops else DEFAULT_STOPS
         station_ids = list(stations) if stations else DEFAULT_AQICN_STATIONS
-        asyncio.run(
-            _run_prim(
-                stop_ids,
-                use_mock=mock,
-                limit=display_limit,
-                save_raw=save_raw,
-                store=store,
-            )
-        )
-        asyncio.run(_run_aqicn(station_ids, store=store))
-    elif source == "meteo":
-        click.echo("Source 'meteo' : à implémenter dans une prochaine PR.")
-        sys.exit(2)
+        asyncio.run(_run_prim(stop_ids, mock, display_limit, save_raw, store))
+        asyncio.run(_run_aqicn(station_ids, store))
+        asyncio.run(_run_meteo(DEFAULT_METEO_POINTS, store))
 
 
 if __name__ == "__main__":
