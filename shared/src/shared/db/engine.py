@@ -1,10 +1,24 @@
-"""Accès à la base de données PostgreSQL (Supabase).
+"""Création de l'engine SQLAlchemy pour PostgreSQL.
 
-Ce module expose une fabrique d'engine SQLAlchemy configurée pour fonctionner
-avec psycopg 3 et le Transaction Pooler de Supabase.
+ParisMove AI utilise Supabase qui expose PostgreSQL via un Transaction Pooler
+(PgBouncer en mode `transaction`). Ce mode a une limitation importante :
+**il ne supporte pas les prepared statements nommés** côté client.
 
-Le module est dans `shared` pour être réutilisable par tous les services
-(ingestion écrit, api lit, coach lit).
+Avec psycopg 3 (notre driver), les prepared statements sont créés
+automatiquement après quelques exécutions de la même requête (par défaut
+`prepare_threshold=5`). Quand le pooler distribue les exécutions sur
+différentes connexions backend, ces prepared statements génèrent l'erreur :
+
+    psycopg.errors.DuplicatePreparedStatement:
+    prepared statement "_pg3_0" already exists
+
+La solution : passer `prepare_threshold=None` à psycopg, ce qui désactive
+totalement la création de prepared statements. Léger surcoût en perf
+(quelques microsecondes par requête), mais c'est le pattern recommandé
+par Supabase pour leur pooler.
+
+Réf : https://www.psycopg.org/psycopg3/docs/api/connections.html#psycopg.Connection.prepare_threshold
+Réf : https://supabase.com/docs/guides/database/connecting-to-postgres#pooler-mode
 """
 from __future__ import annotations
 
@@ -12,31 +26,23 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.pool import NullPool
 
 
-def create_database_engine(database_url: str, *, echo: bool = False) -> Engine:
-    """Crée un engine SQLAlchemy configuré pour Supabase.
+def create_database_engine(database_url: str) -> Engine:
+    """Crée un engine SQLAlchemy adapté à Supabase Transaction Pooler.
 
     Args:
-        database_url: URL de connexion PostgreSQL.
-            Doit commencer par `postgresql+psycopg://` pour utiliser psycopg 3.
-        echo: Si True, logge toutes les requêtes SQL (utile en debug).
+        database_url: URL au format `postgresql+psycopg://...`
 
     Returns:
-        Engine SQLAlchemy. Utilise NullPool : chaque connexion est ouverte
-        puis fermée immédiatement après usage, ce qui convient aux jobs cron
-        courts (GitHub Actions) et au Transaction Pooler de Supabase qui
-        gère lui-même le pooling côté serveur.
+        Un Engine configuré pour fonctionner avec PgBouncer transaction mode.
     """
-    if not database_url.startswith("postgresql+psycopg://"):
-        raise ValueError(
-            "database_url doit commencer par 'postgresql+psycopg://' "
-            "pour utiliser psycopg 3. Reçu : "
-            f"{database_url.split('://')[0]}://..."
-        )
-
     return create_engine(
         database_url,
-        echo=echo,
+        # NullPool : pas de pooling côté SQLAlchemy, on délègue au pooler Supabase
         poolclass=NullPool,
-        # Timeout de connexion pour ne pas bloquer la CI indéfiniment
-        connect_args={"connect_timeout": 10},
+        # Désactivation des prepared statements (incompatibles avec le pooler)
+        connect_args={
+            "prepare_threshold": None,
+        },
+        # Ping avant chaque utilisation pour détecter les connexions mortes
+        pool_pre_ping=True,
     )

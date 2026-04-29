@@ -49,11 +49,21 @@ DEFAULT_STOPS = [
     "STIF:StopArea:SP:411160:", # Saint-Denis
 ]
 
+# Stations AQICN vérifiées dans la bounding box IDF.
+# Sélection couvrant Paris intra-muros + petite couronne.
+# Les IDs ont été obtenus via l'API map/bounds AQICN
+# (voir scripts/discover_aqicn_stations.py).
+#
+# Ces noms et localisations correspondent aux stations Airparif officielles.
+# Si une station devient inactive, le tool aqicn renverra "Données indisponibles"
+# et le run continuera avec les autres stations.
 DEFAULT_AQICN_STATIONS = [
-    "@5722",   # Paris 18e (Aubervilliers)
-    "@5724",   # Paris centre
-    "@13109",  # La Défense
-    "@5708",   # Versailles
+    "@5722",   # Paris (Place de l'Opéra) — centre ville historique
+    "@13109",  # La Défense — pôle économique ouest
+    "@8744",   # Saint-Denis Autoroute A1 — nord
+    "@10082",  # Boulogne-Billancourt — sud-ouest
+    "@10410",  # Gennevilliers — nord-ouest (proximité périphérique)
+    "@5728",   # Paris 18ème — nord-est intra-muros
 ]
 
 DEFAULT_METEO_POINTS: list[tuple[str, str, float, float]] = [
@@ -220,6 +230,18 @@ async def _run_aqicn(stations: list[str], store: bool) -> None:
                 if m is None:
                     click.echo("  Données indisponibles.")
                     continue
+
+                # Vérification post-fetch : la station retournée est-elle bien
+                # en Île-de-France ? (lat 48-50, lon 1.5-3.5).
+                # Cette protection évite que des IDs invalides ramènent par
+                # erreur des stations à l'autre bout du monde.
+                if not _is_in_idf(m.latitude, m.longitude):
+                    click.echo(
+                        f"  ⚠️  Station hors IDF ignorée : "
+                        f"{m.station_name} ({m.latitude:.4f}, {m.longitude:.4f})"
+                    )
+                    continue
+
                 _display_measurement(m)
                 measurements.append(m)
             except httpx.HTTPError as exc:
@@ -227,6 +249,16 @@ async def _run_aqicn(stations: list[str], store: bool) -> None:
 
     if store and measurements:
         _store_measurements(measurements)
+
+
+def _is_in_idf(lat: float | None, lon: float | None) -> bool:
+    """Vérifie qu'une coordonnée GPS est bien en Île-de-France.
+
+    Bounding box IDF étendue : 48-50°N, 1.5-3.5°E.
+    """
+    if lat is None or lon is None:
+        return False
+    return 48.0 <= lat <= 50.0 and 1.5 <= lon <= 3.5
 
 
 def _display_measurement(m: AirMeasurement) -> None:
