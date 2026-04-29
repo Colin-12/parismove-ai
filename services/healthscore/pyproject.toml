@@ -45,3 +45,6 @@ select = ["E", "F", "I", "N", "UP", "RUF"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
