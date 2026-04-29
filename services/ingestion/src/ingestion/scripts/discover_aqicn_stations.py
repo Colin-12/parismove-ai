@@ -108,17 +108,24 @@ def display_stations(stations: list[dict[str, object]]) -> None:
         return
 
     # Tri par latitude puis longitude pour faciliter la sélection géographique
-    stations.sort(key=lambda s: (s["latitude"] or 0, s["longitude"] or 0))
+    def _sort_key(s: dict[str, object]) -> tuple[float, float]:
+        lat = s["latitude"] if isinstance(s["latitude"], (int, float)) else 0.0
+        lon = s["longitude"] if isinstance(s["longitude"], (int, float)) else 0.0
+        return (float(lat), float(lon))
+
+    stations.sort(key=_sort_key)
 
     print(f"{'ID':<10} {'Nom':<45} {'Lat':>8} {'Lon':>8} {'AQI':>4}  Source")
     print("-" * 110)
     for s in stations:
-        lat = f"{s['latitude']:.4f}" if s["latitude"] else "?"
-        lon = f"{s['longitude']:.4f}" if s["longitude"] else "?"
-        name = (s["name"] or "?")[:43]
-        attribution = (s["attribution"] or "?")[:40]
+        lat_val = s["latitude"]
+        lon_val = s["longitude"]
+        lat = f"{float(lat_val):.4f}" if isinstance(lat_val, (int, float)) else "?"
+        lon = f"{float(lon_val):.4f}" if isinstance(lon_val, (int, float)) else "?"
+        name = str(s["name"] or "?")[:43]
+        attribution = str(s["attribution"] or "?")[:40]
         print(
-            f"{s['uid']:<10} {name:<45} {lat:>8} {lon:>8} "
+            f"{s['uid']!s:<10} {name:<45} {lat:>8} {lon:>8} "
             f"{s['aqi']!s:>4}  {attribution}"
         )
 
