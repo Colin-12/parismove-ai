@@ -25,6 +25,7 @@ jobs:
           pip install -e shared
           pip install -e services/ingestion
           pip install -e services/healthscore
+          pip install -e services/coach
           pip install ruff mypy pytest pytest-asyncio pytest-cov pytest-httpx
 
       - name: Lint avec Ruff
@@ -36,8 +37,14 @@ jobs:
       - name: Type check avec Mypy (healthscore)
         run: mypy services/healthscore/src
 
+      - name: Type check avec Mypy (coach)
+        run: mypy services/coach/src
+
       - name: Tests Ingestion
         run: pytest services/ingestion
 
       - name: Tests Healthscore
         run: pytest services/healthscore
+
+      - name: Tests Coach
+        run: pytest services/coach
