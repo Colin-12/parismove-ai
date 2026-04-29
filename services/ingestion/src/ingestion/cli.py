@@ -54,16 +54,20 @@ DEFAULT_STOPS = [
 # Les IDs ont été obtenus via l'API map/bounds AQICN
 # (voir scripts/discover_aqicn_stations.py).
 #
-# Ces noms et localisations correspondent aux stations Airparif officielles.
-# Si une station devient inactive, le tool aqicn renverra "Données indisponibles"
-# et le run continuera avec les autres stations.
+# Stations AQICN vérifiées en IDF (réseau Airparif officiel).
+# Sélectionnées via scripts/discover_aqicn_stations.py pour offrir une
+# bonne couverture géographique : centre + 4 cardinaux + grande couronne.
+# Si une station devient inactive, le tool aqicn renverra
+# "Données indisponibles" et le run continuera avec les autres.
 DEFAULT_AQICN_STATIONS = [
     "@5722",   # Paris (Place de l'Opéra) — centre ville historique
-    "@13109",  # La Défense — pôle économique ouest
-    "@8744",   # Saint-Denis Autoroute A1 — nord
-    "@10082",  # Boulogne-Billancourt — sud-ouest
-    "@10410",  # Gennevilliers — nord-ouest (proximité périphérique)
-    "@5728",   # Paris 18ème — nord-est intra-muros
+    "@12763",  # Paris 1er Les Halles — centre intra-muros
+    "@3082",   # Paris 18ème — nord intra-muros
+    "@3097",   # La Défense — pôle économique ouest
+    "@3085",   # Gennevilliers — nord-ouest périphérique
+    "@3099",   # Bobigny — nord-est
+    "@3103",   # Vitry-sur-Seine — sud
+    "@3104",   # Cergy-Pontoise — grande couronne nord-ouest
 ]
 
 DEFAULT_METEO_POINTS: list[tuple[str, str, float, float]] = [

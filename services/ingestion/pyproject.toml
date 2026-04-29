@@ -57,3 +57,6 @@ warn_unused_configs = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--cov=ingestion --cov-report=term-missing"
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]

@@ -23,4 +23,4 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-shared = ["py.typed"]
+"*" = ["py.typed"]
