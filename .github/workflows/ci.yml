@@ -26,19 +26,23 @@ jobs:
           pip install -e services/ingestion
           pip install -e services/healthscore
           pip install -e services/coach
+          pip install -e services/dashboard
           pip install ruff mypy pytest pytest-asyncio pytest-cov pytest-httpx
 
       - name: Lint avec Ruff
         run: ruff check services/
 
-      - name: Type check avec Mypy (ingestion)
+      - name: Type check Mypy (ingestion)
         run: mypy services/ingestion/src
 
-      - name: Type check avec Mypy (healthscore)
+      - name: Type check Mypy (healthscore)
         run: mypy services/healthscore/src
 
-      - name: Type check avec Mypy (coach)
+      - name: Type check Mypy (coach)
         run: mypy services/coach/src
+
+      - name: Type check Mypy (dashboard)
+        run: mypy --config-file services/dashboard/pyproject.toml services/dashboard/src
 
       - name: Tests Ingestion
         run: pytest services/ingestion
@@ -48,3 +52,6 @@ jobs:
 
       - name: Tests Coach
         run: pytest services/coach
+
+      - name: Tests Dashboard
+        run: pytest services/dashboard
