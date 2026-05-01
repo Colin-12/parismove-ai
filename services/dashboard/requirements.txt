@@ -1,0 +1,27 @@
+# Requirements pour Streamlit Cloud.
+# Streamlit Cloud n'installe pas les packages locaux automatiquement,
+# donc on liste ici toutes les dépendances + les chemins relatifs vers
+# les packages internes.
+
+# === Dépendances tierces ===
+streamlit>=1.36
+streamlit-folium>=0.20
+folium>=0.16
+plotly>=5.20
+pandas>=2.2
+psycopg[binary]>=3.2
+sqlalchemy>=2.0
+pydantic>=2.5
+pydantic-settings>=2.1
+httpx>=0.27
+groq>=0.11
+tenacity>=8.2
+
+# === Packages internes (chemins relatifs depuis la racine du repo) ===
+# Streamlit Cloud installe les requirements depuis la racine du repo,
+# donc les chemins sont relatifs à parismove-ai/.
+-e ./shared
+-e ./services/ingestion
+-e ./services/healthscore
+-e ./services/coach
+-e ./services/dashboard

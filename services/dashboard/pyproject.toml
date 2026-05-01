@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parismove-dashboard"
+version = "0.1.0"
+description = "Dashboard Streamlit pour visualiser les données ParisMove AI"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.36",
+    "streamlit-folium>=0.20",
+    "folium>=0.16",
+    "plotly>=5.20",
+    "pandas>=2.2",
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "parismove-shared",
+    "parismove-healthscore",
+    "parismove-coach",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=dashboard --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "pandas",
+    "pandas.*",
+    "plotly",
+    "plotly.*",
+    "streamlit_folium",
+    "folium",
+    "folium.*",
+]
+ignore_missing_imports = true
