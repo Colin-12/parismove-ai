@@ -182,6 +182,165 @@ def get_air_history(station_id: str | None = None, hours: int = 48) -> pd.DataFr
 
 
 # ============================================================
+# Trafic — page dédiée
+# ============================================================
+
+
+@st.cache_data(ttl=60)
+def get_traffic_kpis() -> dict[str, float | int]:
+    """Statistiques globales du trafic IDFM (24h)."""
+    engine = get_engine()
+
+    sql = text(
+        """
+        WITH recent AS (
+            SELECT
+                line_ref,
+                EXTRACT(EPOCH FROM (
+                    expected_arrival_at - aimed_arrival_at
+                )) AS delay_sec
+            FROM stop_visits
+            WHERE recorded_at >= NOW() - INTERVAL '24 hours'
+              AND aimed_arrival_at IS NOT NULL
+              AND expected_arrival_at IS NOT NULL
+        )
+        SELECT
+            COUNT(*) AS total_visits,
+            COUNT(DISTINCT line_ref) AS active_lines,
+            AVG(delay_sec) AS avg_delay_sec,
+            COUNT(*) FILTER (WHERE delay_sec > 60) * 100.0 /
+                NULLIF(COUNT(*), 0) AS pct_late
+        FROM recent
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(sql).one()
+
+    return {
+        "total_visits": row.total_visits or 0,
+        "active_lines": row.active_lines or 0,
+        "avg_delay_sec": float(row.avg_delay_sec or 0),
+        "pct_late": float(row.pct_late or 0),
+    }
+
+
+@st.cache_data(ttl=120)
+def get_top_delayed_lines(limit: int = 10, mode: str | None = None) -> pd.DataFrame:
+    """Top N lignes avec le plus de retard moyen sur 24h.
+
+    Optionnellement filtré par mode (Métro, RER, Bus, Tram, Train).
+    """
+    engine = get_engine()
+
+    base_sql = """
+        SELECT
+            sv.line_ref,
+            COALESCE(il.short_name, sv.line_ref) AS line_name,
+            COALESCE(il.transport_mode, 'Inconnu') AS transport_mode,
+            COUNT(*) AS visits,
+            AVG(EXTRACT(EPOCH FROM (
+                sv.expected_arrival_at - sv.aimed_arrival_at
+            ))) AS avg_delay_sec
+        FROM stop_visits sv
+        LEFT JOIN idfm_lines il ON sv.line_ref = il.line_ref
+        WHERE sv.recorded_at >= NOW() - INTERVAL '24 hours'
+          AND sv.aimed_arrival_at IS NOT NULL
+          AND sv.expected_arrival_at IS NOT NULL
+    """
+    if mode:
+        base_sql += "  AND il.transport_mode = :mode\n"
+    base_sql += """
+        GROUP BY sv.line_ref, il.short_name, il.transport_mode
+        HAVING COUNT(*) >= 5
+        ORDER BY avg_delay_sec DESC
+        LIMIT :limit
+    """
+
+    params: dict[str, object] = {"limit": limit}
+    if mode:
+        params["mode"] = mode
+
+    with engine.connect() as conn:
+        df = pd.read_sql(text(base_sql), conn, params=params)
+    return df
+
+
+@st.cache_data(ttl=300)
+def get_traffic_heatmap(mode: str | None = None) -> pd.DataFrame:
+    """Heatmap heure x jour-de-semaine du retard moyen sur 7 derniers jours."""
+    engine = get_engine()
+
+    base_sql = """
+        SELECT
+            EXTRACT(DOW FROM sv.recorded_at)::INT AS day_of_week,
+            EXTRACT(HOUR FROM sv.recorded_at)::INT AS hour,
+            AVG(EXTRACT(EPOCH FROM (
+                sv.expected_arrival_at - sv.aimed_arrival_at
+            ))) AS avg_delay_sec,
+            COUNT(*) AS visits
+        FROM stop_visits sv
+        LEFT JOIN idfm_lines il ON sv.line_ref = il.line_ref
+        WHERE sv.recorded_at >= NOW() - INTERVAL '7 days'
+          AND sv.aimed_arrival_at IS NOT NULL
+          AND sv.expected_arrival_at IS NOT NULL
+    """
+    if mode:
+        base_sql += "  AND il.transport_mode = :mode\n"
+    base_sql += """
+        GROUP BY day_of_week, hour
+        ORDER BY day_of_week, hour
+    """
+
+    params: dict[str, object] = {}
+    if mode:
+        params["mode"] = mode
+
+    with engine.connect() as conn:
+        df = pd.read_sql(text(base_sql), conn, params=params)
+    return df
+
+
+@st.cache_data(ttl=300)
+def get_available_modes() -> list[str]:
+    """Liste des modes de transport présents dans le référentiel."""
+    engine = get_engine()
+
+    sql = text(
+        """
+        SELECT DISTINCT transport_mode
+        FROM idfm_lines
+        WHERE transport_mode IS NOT NULL
+        ORDER BY transport_mode
+        """
+    )
+    with engine.connect() as conn:
+        result = conn.execute(sql).all()
+    return [row.transport_mode for row in result]
+
+
+# ============================================================
+# Score santé — zones prédéfinies
+# ============================================================
+
+
+# Zones IDF prédéfinies pour le score santé. Coordonnées indicatives
+# correspondant à des points emblématiques. Mêmes que DEFAULT_METEO_POINTS
+# du service ingestion pour cohérence des données météo.
+PREDEFINED_ZONES: dict[str, tuple[float, float]] = {
+    "Châtelet (Paris 1er)": (48.8585, 2.3470),
+    "La Défense": (48.8918, 2.2389),
+    "Gare du Nord": (48.8809, 2.3553),
+    "Saint-Lazare": (48.8754, 2.3253),
+    "Gare de Lyon": (48.8447, 2.3736),
+    "Montparnasse": (48.8413, 2.3210),
+    "Versailles": (48.8014, 2.1301),
+    "Saint-Denis": (48.9358, 2.3539),
+    "Boulogne-Billancourt": (48.8347, 2.2400),
+    "Créteil": (48.7910, 2.4634),
+}
+
+
+# ============================================================
 # Helpers de formatage
 # ============================================================
 
@@ -233,3 +392,26 @@ def aqi_label(aqi: float | int | None) -> str:
     if aqi <= 300:
         return "Très mauvais"
     return "Dangereux"
+
+
+def grade_color(grade: str) -> str:
+    """Couleur correspondant à un grade A-E."""
+    return {
+        "A": "#10B981",  # vert
+        "B": "#84CC16",  # vert clair
+        "C": "#F59E0B",  # jaune
+        "D": "#F97316",  # orange
+        "E": "#EF4444",  # rouge
+    }.get(grade.upper(), "#9CA3AF")
+
+
+def format_delay(seconds: float) -> str:
+    """Format un retard en string lisible : '+1m 30s' / '-15s' / '0s'."""
+    if seconds == 0:
+        return "0s"
+    sign = "+" if seconds > 0 else "-"
+    abs_sec = abs(int(seconds))
+    if abs_sec < 60:
+        return f"{sign}{abs_sec}s"
+    minutes, secs = divmod(abs_sec, 60)
+    return f"{sign}{minutes}m {secs}s"
