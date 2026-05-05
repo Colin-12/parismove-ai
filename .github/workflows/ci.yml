@@ -26,6 +26,7 @@ jobs:
           pip install -e services/ingestion
           pip install -e services/healthscore
           pip install -e services/coach
+          pip install -e services/ml-pollution
           pip install -e services/dashboard
           pip install ruff mypy pytest pytest-asyncio pytest-cov pytest-httpx
 
@@ -41,6 +42,9 @@ jobs:
       - name: Type check Mypy (coach)
         run: mypy services/coach/src
 
+      - name: Type check Mypy (ml-pollution)
+        run: mypy --config-file services/ml-pollution/pyproject.toml services/ml-pollution/src
+
       - name: Type check Mypy (dashboard)
         run: mypy --config-file services/dashboard/pyproject.toml services/dashboard/src
 
@@ -52,6 +56,9 @@ jobs:
 
       - name: Tests Coach
         run: pytest services/coach
+
+      - name: Tests ML-Pollution
+        run: pytest services/ml-pollution
 
       - name: Tests Dashboard
         run: pytest services/dashboard
