@@ -44,6 +44,7 @@ from ml_pollution.predict import (  # noqa: E402
 from dashboard.data import (  # noqa: E402
     aqi_color,
     format_age,
+    get_air_history,
     get_engine,
     get_latest_air_measurements,
 )
@@ -224,7 +225,8 @@ def main() -> None:
     st.subheader("Évolution et prédictions")
 
     backtest_df = _cached_backtest(selected_id, hours=48)
-    real_df = air_df[air_df["station_id"] == selected_id]
+    # On récupère l'historique complet de la station (pas juste la dernière mesure)
+    real_df = get_air_history(station_id=selected_id, hours=48)
 
     fig = go.Figure()
 
@@ -236,6 +238,7 @@ def main() -> None:
             mode="lines+markers",
             name="Réalité observée",
             line={"color": "#0EA5E9", "width": 2},
+            marker={"size": 6},
         ))
 
     # Trace 2 : prédictions passées (backtest)
