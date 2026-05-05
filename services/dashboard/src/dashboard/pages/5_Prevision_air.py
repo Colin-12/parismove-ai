@@ -12,7 +12,9 @@ l'utilisateur (en local) ou une note "modèle indisponible" (en prod).
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import TypedDict
 
 # Path setup pour Streamlit Cloud
 THIS_DIR = Path(__file__).resolve().parent
@@ -42,15 +44,25 @@ from ml_pollution.predict import (  # noqa: E402
 from dashboard.data import (  # noqa: E402
     aqi_color,
     format_age,
-    get_air_history,
     get_engine,
     get_latest_air_measurements,
 )
 from dashboard.theme import header, page_setup, sidebar_footer  # noqa: E402
 
 
+class PredictionDict(TypedDict):
+    """Type structuré pour le résultat de _cached_predict."""
+
+    station_id: str
+    station_name: str
+    target_dt: datetime
+    predicted_pm25: float
+    last_observed_pm25: float
+    last_observed_at: datetime
+
+
 @st.cache_data(ttl=300)
-def _cached_predict(station_id: str) -> dict[str, object] | None:
+def _cached_predict(station_id: str) -> PredictionDict | None:
     """Cache la prédiction pour éviter de réentraîner à chaque rerun."""
     engine = get_engine()
     model_dir = get_model_dir()
@@ -179,11 +191,8 @@ def main() -> None:
         )
         return
 
-    predicted_pm25 = float(pred["predicted_pm25"])  # type: ignore[arg-type]
-    color = aqi_color(predicted_pm25)  
-    target_dt_str = pd.Timestamp(pred["target_dt"]).strftime( 
-        "%H:%M"
-    )
+    color = aqi_color(pred["predicted_pm25"])
+    target_dt_str = pd.Timestamp(pred["target_dt"]).strftime("%H:%M")
 
     st.markdown(
         f"""
@@ -215,8 +224,7 @@ def main() -> None:
     st.subheader("Évolution et prédictions")
 
     backtest_df = _cached_backtest(selected_id, hours=48)
-    # On récupère l'historique complet de la station (pas juste la dernière mesure)
-    real_df = get_air_history(station_id=selected_id, hours=48)
+    real_df = air_df[air_df["station_id"] == selected_id]
 
     fig = go.Figure()
 
@@ -228,7 +236,6 @@ def main() -> None:
             mode="lines+markers",
             name="Réalité observée",
             line={"color": "#0EA5E9", "width": 2},
-            marker={"size": 6},
         ))
 
     # Trace 2 : prédictions passées (backtest)
