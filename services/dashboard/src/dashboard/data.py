@@ -195,18 +195,16 @@ def get_traffic_kpis() -> dict[str, float | int]:
         """
         WITH recent AS (
             SELECT
-                line_ref,
-                EXTRACT(EPOCH FROM (
-                    expected_arrival_at - aimed_arrival_at
-                )) AS delay_sec
+                line_id,
+                delay_seconds AS delay_sec
             FROM stop_visits
             WHERE recorded_at >= NOW() - INTERVAL '24 hours'
-              AND aimed_arrival_at IS NOT NULL
-              AND expected_arrival_at IS NOT NULL
+              AND aimed_arrival IS NOT NULL
+              AND expected_arrival IS NOT NULL
         )
         SELECT
             COUNT(*) AS total_visits,
-            COUNT(DISTINCT line_ref) AS active_lines,
+            COUNT(DISTINCT line_id) AS active_lines,
             AVG(delay_sec) AS avg_delay_sec,
             COUNT(*) FILTER (WHERE delay_sec > 60) * 100.0 /
                 NULLIF(COUNT(*), 0) AS pct_late
@@ -234,23 +232,21 @@ def get_top_delayed_lines(limit: int = 10, mode: str | None = None) -> pd.DataFr
 
     base_sql = """
         SELECT
-            sv.line_ref,
-            COALESCE(il.short_name, sv.line_ref) AS line_name,
-            COALESCE(il.transport_mode, 'Inconnu') AS transport_mode,
+            sv.line_id,
+            COALESCE(il.short_name, sv.line_id) AS line_name,
+            COALESCE(il.transport_mode, sv.transport_mode, 'Inconnu') AS transport_mode,
             COUNT(*) AS visits,
-            AVG(EXTRACT(EPOCH FROM (
-                sv.expected_arrival_at - sv.aimed_arrival_at
-            ))) AS avg_delay_sec
+            AVG(sv.delay_seconds) AS avg_delay_sec
         FROM stop_visits sv
-        LEFT JOIN idfm_lines il ON sv.line_ref = il.line_ref
+        LEFT JOIN idfm_lines il ON sv.line_id = il.line_id
         WHERE sv.recorded_at >= NOW() - INTERVAL '24 hours'
-          AND sv.aimed_arrival_at IS NOT NULL
-          AND sv.expected_arrival_at IS NOT NULL
+          AND sv.aimed_arrival IS NOT NULL
+          AND sv.expected_arrival IS NOT NULL
     """
     if mode:
-        base_sql += "  AND il.transport_mode = :mode\n"
+        base_sql += "  AND COALESCE(il.transport_mode, sv.transport_mode) = :mode\n"
     base_sql += """
-        GROUP BY sv.line_ref, il.short_name, il.transport_mode
+        GROUP BY sv.line_id, il.short_name, il.transport_mode, sv.transport_mode
         HAVING COUNT(*) >= 5
         ORDER BY avg_delay_sec DESC
         LIMIT :limit
@@ -274,18 +270,16 @@ def get_traffic_heatmap(mode: str | None = None) -> pd.DataFrame:
         SELECT
             EXTRACT(DOW FROM sv.recorded_at)::INT AS day_of_week,
             EXTRACT(HOUR FROM sv.recorded_at)::INT AS hour,
-            AVG(EXTRACT(EPOCH FROM (
-                sv.expected_arrival_at - sv.aimed_arrival_at
-            ))) AS avg_delay_sec,
+            AVG(sv.delay_seconds) AS avg_delay_sec,
             COUNT(*) AS visits
         FROM stop_visits sv
-        LEFT JOIN idfm_lines il ON sv.line_ref = il.line_ref
+        LEFT JOIN idfm_lines il ON sv.line_id = il.line_id
         WHERE sv.recorded_at >= NOW() - INTERVAL '7 days'
-          AND sv.aimed_arrival_at IS NOT NULL
-          AND sv.expected_arrival_at IS NOT NULL
+          AND sv.aimed_arrival IS NOT NULL
+          AND sv.expected_arrival IS NOT NULL
     """
     if mode:
-        base_sql += "  AND il.transport_mode = :mode\n"
+        base_sql += "  AND COALESCE(il.transport_mode, sv.transport_mode) = :mode\n"
     base_sql += """
         GROUP BY day_of_week, hour
         ORDER BY day_of_week, hour
