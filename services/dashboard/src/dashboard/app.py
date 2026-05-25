@@ -131,9 +131,10 @@ def main() -> None:
             Python · PostgreSQL (Supabase) · GitHub Actions · Streamlit · Groq (LLaMA)
 
             #### Architecture
-            5 services autonomes : `ingestion` (écrivain), `healthscore` (scoring),
-            `coach` (assistant IA), `dashboard` (visualisation), `shared`
-            (modèles communs).
+            7 services autonomes : `ingestion` (écrivain), `healthscore` (scoring),
+            `coach` (assistant IA), `ml-pollution` (prédiction PM2.5),
+            `ml-traffic` (prédiction perturbations), `dashboard` (visualisation),
+            `shared` (modèles communs).
             """
         )
 
