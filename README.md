@@ -8,7 +8,7 @@
   <img alt="Streamlit" src="https://img.shields.io/badge/streamlit-Cloud-FF4B4B">
   <img alt="LLM" src="https://img.shields.io/badge/LLM-Groq%20%7C%20LLaMA%203.3-orange">
   <img alt="ML" src="https://img.shields.io/badge/ML-XGBoost-009688">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-280%2B-brightgreen">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-300%2B-brightgreen">
   <img alt="Licence" src="https://img.shields.io/badge/licence-MIT-green">
 </p>
 
@@ -18,7 +18,7 @@
 
 **Dashboard public** : [parismove-ai.streamlit.app](https://parismove-ai.streamlit.app)
 
-5 modules interactifs accessibles publiquement :
+6 modules interactifs accessibles publiquement :
 - 🏠 **Accueil** — KPIs globaux et historique d'ingestion
 - 🌫️ **Qualité de l'air** — Carte Folium des stations Airparif, tendances 48h
 - 🤖 **Coach IA** — Chat conversationnel data-aware (Groq + LLaMA)
@@ -42,46 +42,56 @@ ParisMove AI ingère ces 3 sources en temps réel, calcule un **score santé mul
 
 ## 🏗️ Architecture
 
-Monorepo Python avec **6 services autonomes** :
+Monorepo Python avec **7 services autonomes** :
 
 ```
 parismove-ai/
 ├── shared/                       Modèles Pydantic + helpers BDD
 ├── services/
-│   ├── ingestion/                Pipeline ETL (3 sources, cron 30min)
+│   ├── ingestion/                Pipeline ETL (3 sources, cron 30 min)
 │   ├── healthscore/              Score santé A-E multicritère
 │   ├── coach/                    Coach IA RAG data-aware
-│   ├── ml-pollution/             Modèle XGBoost prédiction PM2.5
-│   └── dashboard/                Streamlit 5 pages
-├── docs/architecture/            ADRs (9 décisions documentées)
+│   ├── ml-pollution/             Modèle XGBoost prédiction PM2.5 H+1
+│   ├── ml-traffic/               Modèle XGBoost prédiction perturbations H+1
+│   └── dashboard/                Streamlit 6 pages
+├── docs/architecture/            11 ADRs documentés
 ├── infrastructure/migrations/    Migrations SQL Supabase
 └── .github/workflows/            CI + cron d'ingestion
 ```
 
 ### Flux de données
 
-```
-┌────────────────┐    ┌─────────────────────────┐    ┌────────────────┐
-│  PRIM IDFM     │───►│                         │    │                │
-├────────────────┤    │   Ingestion service     │    │   Dashboard    │
-│  AQICN/Airparif│───►│   (cron 30 min,         │───►│   Streamlit    │
-├────────────────┤    │    GitHub Actions)      │    │   (5 pages)    │
-│  Open-Meteo    │───►│                         │    │                │
-└────────────────┘    └─────────────┬───────────┘    └────┬───────────┘
-                                    │                     │
-                                    ▼                     │
-                           ┌─────────────────┐            │
-                           │  PostgreSQL     │            │
-                           │  Supabase       │◄───────────┘
-                           │  (star schema)  │            │
-                           └────────┬────────┘            │
-                                    │                     │
-                ┌───────────────────┼─────────────────────┤
-                ▼                   ▼                     ▼
-        ┌──────────────┐    ┌──────────────┐      ┌───────────────┐
-        │ Healthscore  │    │  Coach IA    │      │ ML pollution  │
-        │ (scoring A-E)│    │  (Groq+LLaMA)│      │ (XGBoost)     │
-        └──────────────┘    └──────────────┘      └───────────────┘
+```mermaid
+flowchart TD
+    PRIM[PRIM IDFM] --> ING
+    AQICN[AQICN / Airparif] --> ING
+    METEO[Open-Meteo] --> ING
+    REF[IDFM référentiel] --> ING
+
+    ING["ingestion\nETL cron 30 min · GitHub Actions"]
+    ING --> DB
+
+    DB[("PostgreSQL · Supabase\nstop_visits · air_measurements · weather_observations")]
+
+    DB --> HS
+    DB --> COACH
+    DB --> MLP
+    DB --> MLT
+
+    HS["healthscore\nScore A-E trajet"]
+    COACH["coach\nLLM data-aware"]
+    MLP["ml-pollution\nXGBoost PM2.5 H+1"]
+    MLT["ml-traffic\nXGBoost perturbations H+1"]
+    SHARED["shared\nPydantic · helpers"]
+
+    GROQ["Groq · LLaMA\n70B + 8B"] -.-> COACH
+
+    HS --> DASH
+    COACH --> DASH
+    MLP --> DASH
+    MLT --> DASH
+
+    DASH["dashboard\nStreamlit · 6 pages · Streamlit Cloud"]
 ```
 
 ---
@@ -104,17 +114,19 @@ parismove-ai/
 
 ### Choix d'architecture documentés (ADRs)
 
-9 décisions importantes sont documentées dans `docs/architecture/` :
+11 décisions importantes sont documentées dans `docs/architecture/` :
 
 - **ADR-001** — Choix de Supabase (PostgreSQL managé)
-- **ADR-002** — psycopg 3 + NullPool + `prepare_threshold=None` (fix DuplicatePreparedStatement avec le pooler Supabase)
+- **ADR-002** — psycopg 3 + NullPool + `prepare_threshold=None`
 - **ADR-003** — Star schema, enrichissement par JOIN
 - **ADR-004** — Healthscore A-E avec pondération 60/30/10 (Pollution/Météo/Trafic)
 - **ADR-005** — Coach RAG data-aware avec LLM-as-controller + 5 tools, anti-hallucination 3 niveaux
-- **ADR-006** — Robustesse de l'ingestion : 8 stations Airparif vérifiées + garde géographique
+- **ADR-006** — Robustesse de l'ingestion : 7 stations Airparif vérifiées + garde géographique
 - **ADR-007** — Dashboard Streamlit comme service indépendant
 - **ADR-008** — Pages Trafic + Score santé interactif
-- **ADR-009** — Modèle ML XGBoost global avec station_id catégoriel
+- **ADR-009** — ML pollution XGBoost global avec station_id catégoriel
+- **ADR-010** — ML traffic : classification binaire de perturbations H+1
+- **ADR-011** — Sélection XGBoost pour ml-traffic (AUC 0.745 vs 0.717 baseline)
 
 ---
 
@@ -129,8 +141,7 @@ parismove-ai/
 ### AQICN / Airparif
 - **API** : [aqicn.org](https://aqicn.org)
 - **Données** : qualité de l'air (AQI, PM2.5, PM10, NO₂, O₃)
-- **Stations** : 8 stations Airparif en IDF, sélectionnées et géo-vérifiées
-  (Paris centre, Paris 1er Les Halles, Paris 18ème, La Défense, Gennevilliers, Bobigny, Vitry-sur-Seine, Cergy-Pontoise)
+- **Stations** : 7 stations Airparif en IDF, sélectionnées et géo-vérifiées
 
 ### Open-Meteo
 - **API** : [open-meteo.com](https://open-meteo.com)
@@ -143,7 +154,7 @@ parismove-ai/
 ### Pré-requis
 
 - Python 3.11 ou 3.12
-- Compte Supabase (Free tier) avec une base PostgreSQL
+- Compte [Supabase](https://supabase.com) (Free tier) avec une base PostgreSQL
 - Clé API [Groq](https://console.groq.com) (gratuit pour le LLM)
 - Token [AQICN](https://aqicn.org/data-platform/token/) (gratuit)
 - Clé API [PRIM IDFM](https://prim.iledefrance-mobilites.fr) (gratuit après inscription)
@@ -160,27 +171,25 @@ python -m venv .venv
 source .venv/Scripts/activate          # Git Bash Windows
 # ou : source .venv/bin/activate       # Linux/Mac
 
-# Installation des 6 packages en mode editable
+# Installation des 7 packages en mode éditable
 pip install -e shared
 pip install -e services/ingestion
 pip install -e services/healthscore
 pip install -e services/coach
 pip install -e services/ml-pollution
+pip install -e services/ml-traffic
 pip install -e services/dashboard
-
-# Outils de qualité (optionnel)
-pip install ruff mypy pytest pytest-cov
 ```
 
 ### Configuration
 
 Créer un fichier `.env` à la racine :
 
-```bash
-# Base de données Supabase
+```env
+# Base de données Supabase (Transaction Pooler, port 6543)
 DATABASE_URL=postgresql+psycopg://postgres.xxxxx:PASSWORD@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
 
-# APIs
+# APIs externes
 PRIM_API_KEY=xxxxx
 AQICN_TOKEN=xxxxx
 GROQ_API_KEY=gsk_xxxxx
@@ -188,12 +197,7 @@ GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_MODEL_SMALL=llama-3.1-8b-instant
 ```
 
-Appliquer les migrations SQL :
-
-```bash
-# Les fichiers .sql sont dans infrastructure/migrations/
-# À exécuter dans l'éditeur SQL de Supabase
-```
+Appliquer les migrations SQL dans l'éditeur SQL de Supabase (fichiers dans `infrastructure/migrations/`, dans l'ordre numérique).
 
 ### Utilisation
 
@@ -201,36 +205,31 @@ Appliquer les migrations SQL :
 # Ingérer les données (toutes sources)
 python -m ingestion.cli run --source all --store
 
-# Calculer un score santé pour un trajet
+# Rafraîchir le référentiel IDFM
+python -m ingestion.cli refresh-references
+
+# Calculer un score santé
 healthscore score \
-    --journey-id rer-a \
-    --label "RER A Châtelet → La Défense" \
+    --journey-id chatelet-defense \
+    --label "Châtelet → La Défense" \
     --point 48.8585,2.3470 \
     --point 48.8918,2.2389
 
-# Discuter avec le coach IA
-coach ask "Comment est l'air à Paris en ce moment ?"
+# Entraîner le modèle ML pollution
+python -m ml_pollution.cli train --days 28
 
-# Entraîner le modèle ML
-ml-pollution train --days 30
-ml-pollution predict @5722
+# Entraîner et comparer les modèles ML trafic
+python -m ml_traffic.cli train
+python -m ml_traffic.cli train-xgb
+python -m ml_traffic.cli compare
 
-# Lancer le dashboard
+# Lancer le dashboard en local
 streamlit run services/dashboard/src/dashboard/app.py
 ```
 
 ---
 
 ## 🧪 Tests
-
-Le projet compte **280+ tests** automatisés couvrant :
-
-- Clients API (PRIM, AQICN, Open-Meteo) avec mocks httpx
-- Transformers et loaders (validation Pydantic, déduplication)
-- Logique de scoring (multi-critères, seuils OMS)
-- Coach IA (intent classification, orchestrator, anti-hallucination)
-- Modèle ML (features, persistence, split chronologique)
-- Pages dashboard (tests structurels)
 
 ```bash
 # Lancer tous les tests
@@ -240,7 +239,7 @@ pytest services/
 pytest services/ --cov=services --cov-report=term-missing
 ```
 
-CI verte sur chaque push grâce à `.github/workflows/ci.yml` (Ruff + Mypy + Pytest sur tous les services).
+CI verte sur chaque push via `.github/workflows/ci.yml` (Ruff + Mypy + Pytest sur tous les services).
 
 ---
 
@@ -265,8 +264,8 @@ Question utilisateur
         │
         ▼
 [Generator] ─── LLaMA 3.3 70B (qualité)
-   │     prompt système avec règles strictes
-   │     + données du tool (CONTEXTE)
+          prompt système avec règles strictes
+          + données du tool (CONTEXTE)
         │
         ▼
    Réponse formatée :
@@ -275,25 +274,23 @@ Question utilisateur
    Source : XXX, mesuré il y a Xh
 ```
 
-### Anti-hallucination en 3 niveaux
+**Anti-hallucination en 3 niveaux**
 
 1. **Forcing tools** : si l'intent matche, le LLM DOIT appeler le tool, pas répondre depuis sa connaissance générale
 2. **Citations sources obligatoires** : tout chiffre doit venir d'un tool result, sinon refus
 3. **Mode warning ⚠️** : si pas de tool result disponible, la réponse commence obligatoirement par "⚠️ Pas de données temps-réel..."
 
-### Bilingue automatique
-
-Détection FR/EN du message utilisateur, réponse dans la même langue, jamais de mélange.
+**Bilingue automatique** : détection FR/EN du message utilisateur, réponse dans la même langue, jamais de mélange.
 
 ---
 
-## 📈 Modèle ML pollution — Détails
+## 📈 Modèles ML — Détails
 
-**Cible** : prédiction PM2.5 à H+1 sur les 8 stations Airparif IDF.
+### ML Pollution (PM2.5 H+1)
 
-**Approche** : 1 modèle global XGBoost avec `station_id` comme feature catégorielle (encodage natif via `enable_categorical=True`).
+**Cible** : prédiction PM2.5 à H+1 sur les 7 stations Airparif IDF.
 
-**Features (10)** :
+**Approche** : 1 modèle global XGBoost avec `station_id` comme feature catégorielle (`enable_categorical=True`).
 
 | Catégorie | Features |
 |-----------|----------|
@@ -302,17 +299,21 @@ Détection FR/EN du message utilisateur, réponse dans la même langue, jamais d
 | Météo | `temperature_c`, `humidity_pct`, `wind_speed_ms`, `precipitation_mm` |
 | Géographique | `station_id` (catégoriel) |
 
-**Validation** : split chronologique 80/20 (pas aléatoire — éviter la fuite temporelle sur séries temporelles).
+**Métriques** : MAE 8.13 µg/m³ · RMSE 11.79 µg/m³ (split chronologique 80/20)
 
-**Inspiration** : [OptiMobility-BDIA-2025](https://github.com/Colin-12/OptiMobility-BDIA-2025) (projet personnel antérieur), amélioré ici avec multi-stations + features météo + architecture monorepo + tests.
+### ML Traffic (perturbations H+1)
+
+**Cible** : prédire si une ligne IDFM sera perturbée (retard > 120s ou ≥ 2 passages > 60s) dans l'heure suivante.
+
+**Approche** : XGBoost binaire global, features `mode`, `line_id`, `hour`, `dow`.
+
+**Métriques** : AUC 0.745 · F1 0.594 · Accuracy 0.654 (split chronologique 70/15/15)
 
 ---
 
 ## 📦 Déploiement
 
 ### Streamlit Cloud (dashboard)
-
-Le dashboard est déployé sur [Streamlit Community Cloud](https://share.streamlit.io) :
 
 - Branche surveillée : `develop`
 - Entry point : `services/dashboard/src/dashboard/app.py`
@@ -321,8 +322,6 @@ Le dashboard est déployé sur [Streamlit Community Cloud](https://share.streaml
 
 ### GitHub Actions (ingestion)
 
-Workflow `.github/workflows/ingestion.yml` :
-
 ```yaml
 on:
   schedule:
@@ -330,15 +329,16 @@ on:
   workflow_dispatch:          # Trigger manuel possible
 ```
 
-Exécute `python -m ingestion.cli run --source all --store` qui ingère les 3 sources et écrit dans Supabase.
-
 ### Coûts
 
 Le projet est **100% gratuit** grâce aux free tiers :
-- Supabase Free : 500 Mo de BDD, 2 Go de bande passante
-- Streamlit Cloud : 1 app publique avec 1 Go de RAM
-- Groq Free : ~6 000 requêtes/min en burst, gratuit pour usage personnel
-- GitHub Actions Free : 2 000 minutes/mois (largement suffisant pour le cron)
+
+| Service | Usage | Limite |
+|---------|-------|--------|
+| Supabase Free | BDD PostgreSQL | 500 Mo, 2 Go bande passante |
+| Streamlit Cloud | Dashboard public | 1 app, 1 Go RAM |
+| Groq Free | LLM inférence | ~6 000 req/min en burst |
+| GitHub Actions Free | CI + cron | 2 000 min/mois |
 
 ---
 
@@ -365,7 +365,7 @@ parismove-ai/
 │   │       ├── pollution.py                 # Sub-score air
 │   │       ├── weather.py                   # Sub-score météo
 │   │       ├── traffic.py                   # Sub-score trafic
-│   │       ├── scoring.py                   # Aggrégation A-E
+│   │       ├── scoring.py                   # Agrégation A-E
 │   │       └── compare.py                   # API publique
 │   │
 │   ├── coach/                               # Service IA
@@ -376,13 +376,22 @@ parismove-ai/
 │   │       ├── prompts.py                   # System prompts FR/EN
 │   │       └── llm.py                       # Wrapper Groq
 │   │
-│   ├── ml-pollution/                        # Service ML
+│   ├── ml-pollution/                        # Service ML pollution
 │   │   └── src/ml_pollution/
 │   │       ├── data_access.py               # Fetch + jointure météo
 │   │       ├── features.py                  # Feature engineering
 │   │       ├── train.py                     # Entraînement XGBoost
 │   │       ├── predict.py                   # Inférence + backtest
 │   │       └── persistence.py               # joblib + meta JSON
+│   │
+│   ├── ml-traffic/                          # Service ML trafic
+│   │   └── src/ml_traffic/
+│   │       ├── config.py                    # Settings (seuils, hyperparams)
+│   │       ├── data.py                      # Chargement + nettoyage
+│   │       ├── features.py                  # Target + features
+│   │       ├── train.py                     # Baseline + XGBoost
+│   │       ├── predict.py                   # Inférence probabiliste
+│   │       └── cli.py                       # train, train-xgb, compare
 │   │
 │   └── dashboard/                           # Service Streamlit
 │       └── src/dashboard/
@@ -396,7 +405,7 @@ parismove-ai/
 │               ├── 4_Score_sante.py
 │               └── 5_Prevision_air.py
 │
-├── docs/architecture/                       # 9 ADRs
+├── docs/architecture/                       # 11 ADRs
 ├── infrastructure/migrations/               # SQL Supabase
 └── .github/workflows/                       # CI + cron
 ```
@@ -407,15 +416,14 @@ parismove-ai/
 
 Projet de fin d'études du **Mastère 2 Big Data & IA** à [Sup de Vinci](https://www.supdevinci.fr/) (campus Brest), réalisé en alternance chez Eureden.
 
-### Compétences mises en œuvre
+**Compétences mises en œuvre** :
 
 - **Data Engineering** : pipeline ETL multi-sources, ingestion temps-réel via API REST, modélisation star schema, dédoublonnage, qualité de données
 - **Cloud / DevOps** : déploiement multi-service, GitHub Actions (CI + cron), gestion de secrets, monorepo Python avec packages éditables
-- **Machine Learning** : feature engineering, validation chronologique, persistance modèle, inference batch + temps-réel, MLOps minimaliste
+- **Machine Learning** : feature engineering, validation chronologique, persistance modèle, inférence batch + temps-réel, MLOps minimaliste
 - **IA Générative / RAG** : LLM-as-controller, tools data-aware, prompt engineering, anti-hallucination, intent classification
-- **Frontend / Dataviz** : Streamlit multi-page, cartes Folium, graphes Plotly, theme custom, cache stratégique
-- **Backend** : architecture microservice, Pydantic strict, API design (CLI), gestion d'erreurs robuste
-- **Qualité logicielle** : 280+ tests, type checking strict, ADRs, documentation
+- **Frontend / Dataviz** : Streamlit multi-page, cartes Folium, graphes Plotly, thème custom, cache stratégique
+- **Qualité logicielle** : 300+ tests, type checking strict (Mypy), 11 ADRs, documentation
 
 ---
 
@@ -430,11 +438,11 @@ MIT — voir [LICENSE](LICENSE).
 **Colin Komtcheu (Armand)**
 Mastère 2 Big Data & IA, Sup de Vinci · Brest
 
-- 🔗 [LinkedIn](linkedin.com/in/armand-colin-komtcheu-0014471b3)
+- 🔗 [LinkedIn](https://linkedin.com/in/armand-colin-komtcheu-0014471b3)
 - 💻 [GitHub](https://github.com/Colin-12)
 - 🌐 [Portfolio](https://github.com/Colin-12/portfolio)
 
-Ouvert aux opportunités CDI Bretagne / Grand Ouest sur des postes Data Analyst, Data Scientist ou MLOps.
+Ouvert aux opportunités CDI Bretagne / Grand Ouest — Data Analyst, Data Scientist, MLOps.
 
 ---
 
