@@ -304,8 +304,8 @@ def main() -> None:
             temporelle : les 20% les plus récents forment le set de test.
 
             ### Limites
-            - **Fenêtre courte** : avec 6 jours de data, les patterns
-              hebdomadaires et saisonniers ne sont pas bien capturés.
+            - Fenêtre d'entraînement** : avec {metadata.get('data_window_days', '?')} jours
+              de data, les patterns saisonniers ne sont pas encore tous capturés.
             - **Pas de variables exogènes** : émissions industrielles,
               jours fériés, événements parisiens ne sont pas pris en compte.
             - **Horizon court** : le modèle ne prédit qu'à H+1. Pour des
