@@ -215,7 +215,7 @@ def main() -> None:
             **Source des données** : API PRIM IDFM (Île-de-France Mobilités),
             ingérée toutes les 30 minutes via GitHub Actions.
 
-            **Calcul du retard** : `expected_arrival_at - aimed_arrival_at`
+            **Calcul du retard** : `expected_arrival - aimed_arrival`
             (différence entre heure prévue temps-réel et heure planifiée).
 
             **Top 10** : lignes avec au moins 5 passages observés dans les
