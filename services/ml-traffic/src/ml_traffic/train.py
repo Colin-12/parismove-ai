@@ -1,13 +1,11 @@
-"""Entraînement et évaluation du modèle baseline de perturbation.
+"""Entraînement et évaluation des modèles de perturbation.
 
-Pipeline complet :
-    1. Chargement Supabase
-    2. Nettoyage + filtre lignes éligibles
-    3. Agrégation horaire + construction target/features
-    4. Split chronologique 70/15/15
-    5. Entraînement régression logistique (avec encodage catégoriel)
-    6. Évaluation accuracy / precision / recall / f1 / AUC
-    7. Sauvegarde modèle joblib
+Deux modèles disponibles :
+    * baseline   : régression logistique (PR feat/ml-traffic-baseline)
+    * xgboost    : XGBoostClassifier (PR feat/ml-traffic-xgboost)
+
+Le pipeline est identique pour les deux (même préprocessing, même split)
+afin de garantir une comparaison équitable.
 """
 from __future__ import annotations
 
@@ -29,6 +27,7 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from xgboost import XGBClassifier
 
 FEATURE_COLS_CAT = ["mode", "line_id"]
 FEATURE_COLS_NUM = ["hour", "dow"]
@@ -99,13 +98,9 @@ def split_chronological(
     return train, val, test
 
 
-def build_pipeline(random_state: int = 42) -> Pipeline:
-    """Construit le pipeline scikit-learn baseline.
-
-    OneHotEncoder pour les catégoriels (mode, line_id) + StandardScaler
-    pour les numériques (hour, dow) + LogisticRegression L2.
-    """
-    preprocessor = ColumnTransformer(
+def _build_preprocessor() -> ColumnTransformer:
+    """Préprocesseur commun baseline et XGBoost."""
+    return ColumnTransformer(
         transformers=[
             (
                 "cat",
@@ -115,9 +110,13 @@ def build_pipeline(random_state: int = 42) -> Pipeline:
             ("num", StandardScaler(), FEATURE_COLS_NUM),
         ]
     )
-    pipeline = Pipeline(
+
+
+def build_pipeline(random_state: int = 42) -> Pipeline:
+    """Construit le pipeline scikit-learn baseline (régression logistique)."""
+    return Pipeline(
         steps=[
-            ("preprocessor", preprocessor),
+            ("preprocessor", _build_preprocessor()),
             (
                 "classifier",
                 LogisticRegression(
@@ -128,7 +127,43 @@ def build_pipeline(random_state: int = 42) -> Pipeline:
             ),
         ]
     )
-    return pipeline
+
+
+def build_xgb_pipeline(
+    n_estimators: int = 200,
+    max_depth: int = 6,
+    learning_rate: float = 0.1,
+    random_state: int = 42,
+) -> Pipeline:
+    """Construit le pipeline XGBoost.
+
+    Notes
+    -----
+    `scale_pos_weight` compense le déséquilibre de classes : si 33% de positifs,
+    scale_pos_weight = (1 - 0.33) / 0.33 ≈ 2.0. Équivalent au `class_weight='balanced'`
+    de la régression logistique.
+
+    `eval_metric='logloss'` supprime le warning XGBoost sur le choix de métrique.
+    """
+    scale_pos_weight = 2.0  # Calibré sur les 33% de positifs observés en EDA v2
+
+    return Pipeline(
+        steps=[
+            ("preprocessor", _build_preprocessor()),
+            (
+                "classifier",
+                XGBClassifier(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    learning_rate=learning_rate,
+                    scale_pos_weight=scale_pos_weight,
+                    eval_metric="logloss",
+                    random_state=random_state,
+                    verbosity=0,
+                ),
+            ),
+        ]
+    )
 
 
 def train_baseline(
@@ -136,13 +171,54 @@ def train_baseline(
     y_train: pd.Series,
     random_state: int = 42,
 ) -> Pipeline:
-    """Entraîne le pipeline baseline sur x_train / y_train.
-
-    Le pipeline encode automatiquement les catégoriels et standardise
-    les numériques avant la régression logistique.
-    """
+    """Entraîne le pipeline baseline (régression logistique)."""
     pipeline = build_pipeline(random_state=random_state)
     pipeline.fit(x_train[ALL_FEATURE_COLS], y_train)
+    return pipeline
+
+
+def train_xgboost(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    x_val: pd.DataFrame,
+    y_val: pd.Series,
+    n_estimators: int = 200,
+    max_depth: int = 6,
+    learning_rate: float = 0.1,
+    random_state: int = 42,
+) -> Pipeline:
+    """Entraîne le pipeline XGBoost avec early stopping sur le val set.
+
+    L'early stopping arrête l'entraînement si l'AUC sur le val set ne
+    s'améliore pas pendant 20 rounds consécutifs. Cela évite le surapprentissage
+    sans avoir à fixer `n_estimators` à la main.
+
+    Parameters
+    ----------
+    x_train, y_train : données d'entraînement.
+    x_val, y_val : données de validation pour l'early stopping.
+    """
+    pipeline = build_xgb_pipeline(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        learning_rate=learning_rate,
+        random_state=random_state,
+    )
+
+    # Préprocesser les données de validation pour l'early stopping
+    preprocessor = pipeline.named_steps["preprocessor"]
+    preprocessor.fit(x_train[ALL_FEATURE_COLS])
+    x_train_t = preprocessor.transform(x_train[ALL_FEATURE_COLS])
+    x_val_t = preprocessor.transform(x_val[ALL_FEATURE_COLS])
+
+    clf = pipeline.named_steps["classifier"]
+    clf.fit(
+        x_train_t,
+        y_train,
+        eval_set=[(x_val_t, y_val)],
+        verbose=False,
+    )
+
     return pipeline
 
 
