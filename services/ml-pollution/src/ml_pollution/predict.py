@@ -154,9 +154,12 @@ def predict_next_hour(
 
     # --- Météo ---
     def _coerce(value: object) -> float:
-        if value is None or pd.isna(value):  # type: ignore[arg-type]
+        try:
+            if value is None:
+                return float("nan")
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
             return float("nan")
-        return float(value)  # type: ignore[arg-type]
 
     temperature_c = _coerce(last_row.get("temperature_c"))
     humidity_pct = _coerce(last_row.get("humidity_pct"))
