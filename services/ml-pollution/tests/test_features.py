@@ -12,14 +12,18 @@ from ml_pollution.features import (
 )
 
 
-def _make_sample_df(n_rows: int = 30, station_id: str = "@5722") -> pd.DataFrame:
-    """Génère un DataFrame de test avec mesures horaires factices."""
+def _make_sample_df(n_rows: int = 30, station_id: str = "@3082") -> pd.DataFrame:
+    """Génère un DataFrame de test avec mesures horaires factices.
+
+    Note : station_id par défaut changé en @3082 (Paris 18e) car @5722
+    est exclu de l'entraînement (station trafic routier trop volatile).
+    """
     timestamps = pd.date_range("2026-04-25", periods=n_rows, freq="h", tz="UTC")
     return pd.DataFrame({
         "station_id": [station_id] * n_rows,
-        "station_name": ["Paris (Place de l'Opera)"] * n_rows,
-        "latitude": [48.87] * n_rows,
-        "longitude": [2.33] * n_rows,
+        "station_name": ["Paris 18eme"] * n_rows,
+        "latitude": [48.89] * n_rows,
+        "longitude": [2.34] * n_rows,
         "measured_at": timestamps,
         "pm25": [30 + i * 0.5 for i in range(n_rows)],
         "pm10": [40 + i * 0.5 for i in range(n_rows)],
@@ -33,7 +37,8 @@ def _make_sample_df(n_rows: int = 30, station_id: str = "@5722") -> pd.DataFrame
 
 class TestFeatureColumns:
     def test_feature_columns_count(self) -> None:
-        assert len(FEATURE_COLUMNS) == 10
+        # 12 colonnes : 3 temporelles + 4 lags + 4 météo + station_id
+        assert len(FEATURE_COLUMNS) == 12
 
     def test_target_in_features_excluded(self) -> None:
         assert TARGET_COLUMN not in FEATURE_COLUMNS
@@ -42,18 +47,28 @@ class TestFeatureColumns:
         for cat in CATEGORICAL_FEATURES:
             assert cat in FEATURE_COLUMNS
 
+    def test_lag_columns_present(self) -> None:
+        assert "pm25_h2" in FEATURE_COLUMNS
+        assert "pm25_h3" in FEATURE_COLUMNS
+
 
 class TestBuildFeatures:
     def test_empty_input(self) -> None:
         result = build_features(pd.DataFrame(), for_training=True)
         assert result.empty
 
-    def test_training_drops_first_24h(self) -> None:
-        # Avec 30 lignes consécutives, la lag h-24 ne marche que sur les
-        # lignes 25+ (et h+1 ne marche pas sur la dernière).
+    def test_excluded_station_returns_empty(self) -> None:
+        """@5722 est exclue de l'entraînement."""
+        df = _make_sample_df(n_rows=30, station_id="@5722")
+        result = build_features(df, for_training=True)
+        assert result.empty
+
+    def test_training_drops_first_rows(self) -> None:
+        # Avec 30 lignes : lag h24 nécessite 24 lignes avant,
+        # + 1 ligne pour la cible h+1 = 5 lignes exploitables
         df = _make_sample_df(n_rows=30)
         result = build_features(df, for_training=True)
-        assert len(result) == 5  # 30 - 24 (lag) - 1 (cible)
+        assert len(result) == 5  # 30 - 24 (lag h24) - 1 (cible)
 
     def test_training_has_target(self) -> None:
         df = _make_sample_df(n_rows=30)
@@ -78,17 +93,16 @@ class TestBuildFeatures:
     def test_lag_features_correct(self) -> None:
         df = _make_sample_df(n_rows=30)
         result = build_features(df, for_training=True)
-        # pm25_h1 doit être strictement < pm25 (puisque pm25 augmente)
-        # Note: result.iloc[0] correspond à la mesure 25 (index 24 d'origine)
-        # à cet endroit, pm25_h1 = pm25 de l'index 23 et pm25 de cible (cible = h+1)
         assert (result["pm25_h1"] >= 0).all()
         assert (result["pm25_h24"] >= 0).all()
+        assert (result["pm25_h2"] >= 0).all()
+        assert (result["pm25_h3"] >= 0).all()
 
 
 class TestBuildInferenceRow:
     def test_returns_single_row(self) -> None:
         row = build_inference_row(
-            station_id="@5722",
+            station_id="@3082",
             target_dt=pd.Timestamp("2026-05-02 14:00", tz="UTC"),
             pm25_h1=35.0,
             pm25_h24=40.0,
@@ -102,7 +116,7 @@ class TestBuildInferenceRow:
 
     def test_temporal_extraction(self) -> None:
         row = build_inference_row(
-            station_id="@5722",
+            station_id="@3082",
             target_dt=pd.Timestamp("2026-05-02 14:00", tz="UTC"),
             pm25_h1=35.0,
             pm25_h24=40.0,
@@ -115,9 +129,8 @@ class TestBuildInferenceRow:
         assert row.iloc[0]["mois"] == 5
 
     def test_handles_none_meteo(self) -> None:
-        # En cas d'absence de météo, on doit pouvoir construire la row
         row = build_inference_row(
-            station_id="@5722",
+            station_id="@3082",
             target_dt=pd.Timestamp("2026-05-02 14:00", tz="UTC"),
             pm25_h1=35.0,
             pm25_h24=None,
