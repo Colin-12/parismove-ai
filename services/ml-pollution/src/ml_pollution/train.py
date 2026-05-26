@@ -1,12 +1,7 @@
 """Entraînement du modèle XGBoost de prédiction PM2.5.
 
-Le modèle est global (un seul fichier .joblib) avec station_id comme
-feature catégorielle. Cela permet d'utiliser tout le volume de données
-disponible (toutes stations confondues) tout en laissant le modèle
-apprendre des spécificités locales via l'encodage de la station.
-
-Métriques calculées sur un split chronologique (les 20% les plus récents
-forment le test set).
+v2 : prédiction sur log(pm25) — les prédictions sont reconverties
+en µg/m³ via expm1() pour l'évaluation et l'affichage.
 """
 from __future__ import annotations
 
@@ -54,12 +49,7 @@ class TrainingResult:
 def chronological_split(
     df: pd.DataFrame, test_ratio: float = 0.2
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split chronologique : les 20% les plus récents = test set.
-
-    On NE fait PAS de split aléatoire : on veut éviter la fuite temporelle
-    (le modèle prédirait le passé à partir du futur si on faisait un random
-    split sur des séries temporelles).
-    """
+    """Split chronologique : les 20% les plus récents = test set."""
     if df.empty:
         return df, df
     n_test = max(1, int(len(df) * test_ratio))
@@ -71,20 +61,14 @@ def train_model(
     engine: Engine,
     days: int = 30,
     test_ratio: float = 0.2,
-    n_estimators: int = 200,
-    max_depth: int = 5,
-    learning_rate: float = 0.1,
+    n_estimators: int = 300,
+    max_depth: int = 6,
+    learning_rate: float = 0.05,
 ) -> TrainingResult:
     """Charge la data, construit les features, entraîne, évalue.
 
-    Args:
-        engine: SQLAlchemy engine pour Supabase
-        days: fenêtre temporelle d'entraînement
-        test_ratio: proportion gardée pour le test (chronologique)
-        n_estimators, max_depth, learning_rate: hyperparamètres XGBoost
-
-    Returns:
-        TrainingResult avec le modèle entraîné et les métriques
+    Le modèle prédit log(pm25+1). Les métriques MAE/RMSE sont calculées
+    après reconversion en µg/m³ via expm1() pour rester interprétables.
     """
     logger.info("training_started", days=days)
 
@@ -99,8 +83,6 @@ def train_model(
     if len(features_df) < 30:
         raise ValueError(
             f"Pas assez d'échantillons exploitables ({len(features_df)} < 30). "
-            "Le pipeline d'ingestion a besoin de plus de temps pour "
-            "accumuler des paires (mesure, mesure +1h)."
         )
 
     logger.info(
@@ -115,21 +97,25 @@ def train_model(
     x_test = df_test[FEATURE_COLUMNS]
     y_test = df_test[TARGET_COLUMN]
 
-    # XGBoost avec support natif des features catégorielles
     model = XGBRegressor(
         n_estimators=n_estimators,
         max_depth=max_depth,
         learning_rate=learning_rate,
+        subsample=0.8,
+        colsample_bytree=0.8,
         enable_categorical=True,
         tree_method="hist",
         random_state=42,
     )
     model.fit(x_train, y_train)
 
-    # Évaluation
-    y_pred = model.predict(x_test)
-    mae = float(mean_absolute_error(y_test, y_pred))
-    rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
+    # Évaluation en µg/m³ (reconversion depuis log)
+    y_pred_log = model.predict(x_test)
+    y_pred_pm25 = np.expm1(y_pred_log)
+    y_test_pm25 = np.expm1(y_test)
+
+    mae = float(mean_absolute_error(y_test_pm25, y_pred_pm25))
+    rmse = float(np.sqrt(mean_squared_error(y_test_pm25, y_pred_pm25)))
 
     metrics = TrainingMetrics(
         mae=mae,
@@ -151,6 +137,7 @@ def train_model(
         "feature_columns": FEATURE_COLUMNS,
         "categorical_features": CATEGORICAL_FEATURES,
         "target_column": TARGET_COLUMN,
+        "log_transform": True,
         "metrics": {
             "mae": metrics.mae,
             "rmse": metrics.rmse,
@@ -162,6 +149,8 @@ def train_model(
             "n_estimators": n_estimators,
             "max_depth": max_depth,
             "learning_rate": learning_rate,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
         },
         "data_window_days": days,
     }

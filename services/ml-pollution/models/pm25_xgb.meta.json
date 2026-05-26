@@ -4,6 +4,8 @@
     "jour_semaine",
     "mois",
     "pm25_h1",
+    "pm25_h2",
+    "pm25_h3",
     "pm25_h24",
     "temperature_c",
     "humidity_pct",
@@ -14,20 +16,23 @@
   "categorical_features": [
     "station_id"
   ],
-  "target_column": "target_pm25_h1",
+  "target_column": "target_log_pm25_h1",
+  "log_transform": true,
   "metrics": {
-    "mae": 3.272961869552751,
-    "rmse": 6.420158458669331,
-    "n_train": 39709,
-    "n_test": 9927,
-    "n_stations": 9
+    "mae": 2.626806991239707,
+    "rmse": 5.3799575282770835,
+    "n_train": 39544,
+    "n_test": 9886,
+    "n_stations": 8
   },
   "hyperparameters": {
     "n_estimators": 200,
     "max_depth": 5,
-    "learning_rate": 0.1
+    "learning_rate": 0.1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8
   },
   "data_window_days": 400,
-  "saved_at": "2026-05-26T09:55:52.140226+00:00",
+  "saved_at": "2026-05-26T11:27:29.462511+00:00",
   "model_filename": "pm25_xgb.joblib"
 }
