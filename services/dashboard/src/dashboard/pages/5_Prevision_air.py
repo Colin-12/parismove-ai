@@ -60,6 +60,7 @@ class PredictionDict(TypedDict):
     predicted_pm25: float
     last_observed_pm25: float
     last_observed_at: datetime
+    data_source: str
 
 
 @st.cache_data(ttl=300)
@@ -79,6 +80,7 @@ def _cached_predict(station_id: str) -> PredictionDict | None:
         "predicted_pm25": pred.predicted_pm25,
         "last_observed_pm25": pred.last_observed_pm25,
         "last_observed_at": pred.last_observed_at,
+        "data_source": pred.data_source,
     }
 
 
@@ -119,6 +121,7 @@ def _render_no_model_message() -> None:
             """
         )
 
+
 def _pm25_advice(pm25: float) -> tuple[str, str]:
     """Retourne (emoji + label, conseil) selon le niveau PM2.5."""
     if pm25 <= 12:
@@ -134,8 +137,12 @@ def _pm25_advice(pm25: float) -> tuple[str, str]:
             "surtout si vous êtes sensible."
         )
     if pm25 <= 150:
-        return "🔴 Très mauvais", "Limitez les activités en extérieur. Port du masque recommandé."
+        return (
+            "🔴 Très mauvais",
+            "Limitez les activités en extérieur. Port du masque recommandé.",
+        )
     return "🟣 Dangereux", "Restez à l'intérieur. Évitez toute exposition extérieure."
+
 
 def main() -> None:
     page_setup("Prévision air", icon="🔮")
@@ -241,11 +248,22 @@ def main() -> None:
     label, advice = _pm25_advice(pred["predicted_pm25"])
     st.info(f"**{label}** — {advice}")
 
-    # --- Graphique avec 3 traces (inspiré OptiMobility) ---
+    # --- Indicateur de fraîcheur des données ---
+    if pred["data_source"] == "live":
+        st.caption("✅ Basé sur une mesure temps-réel (< 2h)")
+    else:
+        age = format_age(
+            pd.Timestamp(pred["last_observed_at"]).to_pydatetime()
+        )
+        st.caption(
+            f"⚠️ Basé sur la dernière mesure en base ({age}) "
+            "— données Airparif non disponibles en temps réel"
+        )
+
+    # --- Graphique avec 3 traces ---
     st.subheader("Évolution et prédictions")
 
     backtest_df = _cached_backtest(selected_id, hours=48)
-    # On récupère l'historique complet de la station (pas juste la dernière mesure)
     real_df = get_air_history(station_id=selected_id, hours=48)
 
     fig = go.Figure()
