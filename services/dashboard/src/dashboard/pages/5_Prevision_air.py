@@ -124,13 +124,18 @@ def _pm25_advice(pm25: float) -> tuple[str, str]:
     if pm25 <= 12:
         return "🟢 Excellent", "Air pur. Idéal pour toute activité en extérieur."
     if pm25 <= 35:
-        return "🟡 Modéré", "Qualité acceptable. Les personnes sensibles peuvent ressentir une légère gêne."
+        return "🟡 Modéré", (
+            "Qualité acceptable. Les personnes sensibles "
+            "peuvent ressentir une légère gêne."
+        )
     if pm25 <= 55:
-        return "🟠 Mauvais", "Évitez les efforts intenses en extérieur, surtout si vous êtes sensible."
+        return "🟠 Mauvais", (
+            "Évitez les efforts intenses en extérieur, "
+            "surtout si vous êtes sensible."
+        )
     if pm25 <= 150:
         return "🔴 Très mauvais", "Limitez les activités en extérieur. Port du masque recommandé."
     return "🟣 Dangereux", "Restez à l'intérieur. Évitez toute exposition extérieure."
-
 
 def main() -> None:
     page_setup("Prévision air", icon="🔮")
