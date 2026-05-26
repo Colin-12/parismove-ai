@@ -165,26 +165,17 @@ def main() -> None:
         return
 
     metrics = metadata.get("metrics", {})
-    cols = st.columns(4)
+    cols = st.columns(2)
     with cols[0]:
         st.metric(
             "MAE", f"{metrics.get('mae', 0):.2f} µg/m³",
-            help="Erreur Absolue Moyenne sur le set de test",
+             help="Erreur Absolue Moyenne sur le set de test",
         )
     with cols[1]:
         st.metric(
             "RMSE", f"{metrics.get('rmse', 0):.2f} µg/m³",
-            help="Racine de l'Erreur Quadratique Moyenne",
-        )
-    with cols[2]:
-        st.metric("Échantillons train", f"{metrics.get('n_train', 0)}")
-    with cols[3]:
-        saved_at = metadata.get("saved_at", "?")
-        if saved_at and saved_at != "?":
-            saved_dt = pd.Timestamp(saved_at)
-            st.metric("Entraîné", format_age(saved_dt.to_pydatetime()))
-        else:
-            st.metric("Entraîné", "?")
+             help="Racine de l'Erreur Quadratique Moyenne",
+         )
 
     st.markdown("")
 
