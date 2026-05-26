@@ -35,6 +35,9 @@ from healthscore.weather import WeatherInputs, score_weather
 # représentative pour le waypoint. On émet alors un warning.
 MAX_REPRESENTATIVE_DISTANCE_KM = 5.0
 
+def _clamp(value: float) -> float:
+    """Clamp un score entre 0.0 et 100.0 pour éviter les erreurs de précision flottante."""
+    return max(0.0, min(100.0, value))
 
 def _score_waypoint(
     latitude: float,
@@ -110,10 +113,10 @@ def _score_waypoint(
     exposure = WaypointExposure(
         latitude=latitude,
         longitude=longitude,
-        pollution_score=pollution,
-        weather_score=weather,
-        traffic_score=traffic,
-        overall_score=overall,
+	pollution_score=_clamp(pollution),
+        weather_score=_clamp(weather),
+        traffic_score=_clamp(traffic),
+        overall_score=_clamp(overall),
         nearest_air_station_id=air_data.station_id if air_data else None,
         nearest_air_station_distance_km=air_distance,
         pm25=air_data.pm25 if air_data else None,
@@ -200,10 +203,10 @@ def score_journey(
         journey_id=journey_id,
         journey_label=journey_label,
         waypoints=exposures,
-        pollution_score=avg_pollution,
-        weather_score=avg_weather,
-        traffic_score=avg_traffic,
-        overall_score=overall,
+	pollution_score=_clamp(avg_pollution),
+        weather_score=_clamp(avg_weather),
+        traffic_score=_clamp(avg_traffic),
+        overall_score=_clamp(overall),
         grade=score_to_grade(overall),
         evaluated_at=datetime.now(UTC),
         weights=weights,
