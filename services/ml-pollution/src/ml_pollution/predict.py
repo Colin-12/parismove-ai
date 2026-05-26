@@ -14,7 +14,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -66,9 +66,9 @@ def _fetch_live_pm25(station_id: str) -> tuple[float, datetime] | None:
                 return None
             measured_at = measurement.measured_at
             if measured_at.tzinfo is None:
-                measured_at = measured_at.replace(tzinfo=timezone.utc)
+                measured_at = measured_at.replace(tzinfo=UTC)
             age_hours = (
-                datetime.now(timezone.utc) - measured_at
+                datetime.now(UTC) - measured_at
             ).total_seconds() / 3600
             if age_hours > _LIVE_MAX_AGE_HOURS:
                 logger.debug(
@@ -80,7 +80,7 @@ def _fetch_live_pm25(station_id: str) -> tuple[float, datetime] | None:
 
         return asyncio.run(_fetch())
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("Appel AQICN live échoué (%s), fallback BDD", exc)
         return None
 
