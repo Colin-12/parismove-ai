@@ -5,8 +5,6 @@ Utilisé par le dashboard et la CLI.
 Stratégie de fraîcheur des données (Option B) :
     1. Tente d'abord un appel direct à l'API AQICN pour pm25_h1 live
     2. Si l'appel échoue ou si la mesure a plus de 2h, fallback sur la BDD
-    Cette approche garantit que la prédiction porte sur H+1 depuis maintenant,
-    pas depuis la dernière mesure stockée (qui peut avoir 4-6h de délai).
 """
 from __future__ import annotations
 
@@ -17,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from sqlalchemy import Engine
 
@@ -26,7 +25,6 @@ from ml_pollution.persistence import load_model
 
 logger = logging.getLogger(__name__)
 
-# Délai maximum acceptable pour la mesure live (en heures)
 _LIVE_MAX_AGE_HOURS = 2
 
 
@@ -40,23 +38,16 @@ class Prediction:
     predicted_pm25: float
     last_observed_pm25: float
     last_observed_at: datetime
-    data_source: str  # "live" ou "db" — pour affichage dans le dashboard
+    data_source: str  # "live" ou "db"
 
 
 def _fetch_live_pm25(station_id: str) -> tuple[float, datetime] | None:
-    """Tente de récupérer la mesure PM2.5 live depuis l'API AQICN.
-
-    Returns:
-        (pm25, measured_at) si la mesure est fraîche (< _LIVE_MAX_AGE_HOURS),
-        None sinon (erreur réseau, token manquant, mesure trop vieille).
-    """
+    """Tente de récupérer la mesure PM2.5 live depuis l'API AQICN."""
     token = os.environ.get("AQICN_TOKEN", "")
     if not token:
-        logger.debug("AQICN_TOKEN absent, fallback BDD")
         return None
 
     try:
-        # Import local pour éviter la dépendance circulaire
         from ingestion.clients.aqicn import AqicnClient
 
         async def _fetch() -> tuple[float, datetime] | None:
@@ -71,10 +62,6 @@ def _fetch_live_pm25(station_id: str) -> tuple[float, datetime] | None:
                 datetime.now(UTC) - measured_at
             ).total_seconds() / 3600
             if age_hours > _LIVE_MAX_AGE_HOURS:
-                logger.debug(
-                    "Mesure AQICN trop vieille (%.1fh), fallback BDD",
-                    age_hours,
-                )
                 return None
             return float(measurement.pm25), measured_at
 
@@ -98,7 +85,7 @@ def predict_next_hour(
     Args:
         engine: SQLAlchemy engine
         model_dir: répertoire où le modèle est sauvegardé
-        station_id: ID Airparif (ex: '@5722')
+        station_id: ID Airparif (ex: '@12763')
 
     Returns:
         Prediction avec la valeur prédite et le contexte.
@@ -107,7 +94,8 @@ def predict_next_hour(
         FileNotFoundError: si le modèle n'a jamais été entraîné
         ValueError: si la station n'a pas de mesure récente
     """
-    model, _meta = load_model(model_dir)
+    model, meta = load_model(model_dir)
+    use_log = meta.get("log_transform", False)
 
     df = fetch_recent_for_inference(engine, hours_back=48)
     df_station = df[df["station_id"] == station_id].copy()
@@ -118,6 +106,9 @@ def predict_next_hour(
         )
 
     df_station = df_station.sort_values("measured_at")
+    df_station["measured_at"] = pd.to_datetime(
+        df_station["measured_at"], utc=True
+    )
     last_row = df_station.iloc[-1]
     last_dt = pd.Timestamp(last_row["measured_at"])
     if last_dt.tz is None:
@@ -130,42 +121,45 @@ def predict_next_hour(
         last_observed_at = live_dt
         target_dt_ts = pd.Timestamp(live_dt) + pd.Timedelta(hours=1)
         data_source = "live"
-        logger.info(
-            "Mesure AQICN live utilisée pour %s : %.1f µg/m³",
-            station_id,
-            pm25_h1,
-        )
     else:
         pm25_h1 = float(last_row["pm25"])
         last_observed_at = last_dt.to_pydatetime()
         target_dt_ts = last_dt + pd.Timedelta(hours=1)
         data_source = "db"
-        logger.info(
-            "Fallback BDD pour %s : dernière mesure à %s",
-            station_id,
-            last_dt,
-        )
 
     target_dt = target_dt_ts.to_pydatetime()
 
-    # pm25_h24 = mesure ~24h avant la cible (toujours depuis la BDD)
-    target_minus_24 = target_dt_ts - pd.Timedelta(hours=24)
-    df_station["measured_at"] = pd.to_datetime(
-        df_station["measured_at"], utc=True
-    )
-    older = df_station[df_station["measured_at"] <= target_minus_24]
-    pm25_h24: float | None
-    if older.empty:
-        pm25_h24 = None
-    else:
-        idx = (older["measured_at"] - target_minus_24).abs().idxmin()
-        pm25_h24 = float(older.loc[idx, "pm25"])
+    # --- Lags depuis la BDD ---
+    def _get_lag_pm25(hours_before: int) -> float:
+        """Retourne le PM2.5 il y a `hours_before` heures (float ou nan)."""
+        lag_dt = target_dt_ts - pd.Timedelta(hours=hours_before)
+        candidates = df_station[df_station["measured_at"] <= lag_dt]
+        if candidates.empty:
+            return float("nan")
+        idx = (candidates["measured_at"] - lag_dt).abs().idxmin()
+        return float(candidates.loc[idx, "pm25"])
 
-    # Météo : dernière obs de la station (depuis la BDD)
-    def _coerce(value: object) -> float | None:
-        if value is None or pd.isna(value):
-            return None
-        return float(value)  # type: ignore[arg-type]
+    pm25_h2 = _get_lag_pm25(2)
+    pm25_h3 = _get_lag_pm25(3)
+
+    # pm25_h24
+    target_minus_24 = target_dt_ts - pd.Timedelta(hours=24)
+    older = df_station[df_station["measured_at"] <= target_minus_24]
+    pm25_h24: float
+    if older.empty:
+        pm25_h24 = float("nan")
+    else:
+        idx24 = (older["measured_at"] - target_minus_24).abs().idxmin()
+        pm25_h24 = float(older.loc[idx24, "pm25"])
+
+    # --- Météo ---
+    def _coerce(value: object) -> float:
+        try:
+            if value is None:
+                return float("nan")
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return float("nan")
 
     temperature_c = _coerce(last_row.get("temperature_c"))
     humidity_pct = _coerce(last_row.get("humidity_pct"))
@@ -176,6 +170,8 @@ def predict_next_hour(
         station_id=station_id,
         target_dt=pd.Timestamp(target_dt),
         pm25_h1=pm25_h1,
+        pm25_h2=pm25_h2,
+        pm25_h3=pm25_h3,
         pm25_h24=pm25_h24,
         temperature_c=temperature_c,
         humidity_pct=humidity_pct,
@@ -183,7 +179,9 @@ def predict_next_hour(
         precipitation_mm=precipitation_mm,
     )
 
-    predicted = float(model.predict(features)[0])
+    raw_pred = float(model.predict(features)[0])
+    predicted = float(np.expm1(raw_pred)) if use_log else raw_pred
+    predicted = max(0.0, predicted)
 
     return Prediction(
         station_id=station_id,
@@ -204,14 +202,11 @@ def backtest_station(
 ) -> pd.DataFrame:
     """Génère les prédictions historiques pour une station (visualisation).
 
-    Pour chaque heure de la fenêtre où on a les features nécessaires,
-    on calcule ce que le modèle aurait prédit. Permet de tracer la courbe
-    "Prédiction passée" du dashboard.
-
     Returns:
         DataFrame avec colonnes : measured_at, pm25_real, pm25_predicted
     """
-    model, _meta = load_model(model_dir)
+    model, meta = load_model(model_dir)
+    use_log = meta.get("log_transform", False)
 
     df = fetch_recent_for_inference(engine, hours_back=hours + 24)
     df_station = df[df["station_id"] == station_id].copy()
@@ -242,15 +237,14 @@ def backtest_station(
     valid_features["station_id"] = valid_features["station_id"].astype(
         "category"
     )
-    predictions = model.predict(valid_features)
+    raw_preds = model.predict(valid_features)
+    predictions = np.expm1(raw_preds) if use_log else raw_preds
+    predictions = np.maximum(0, predictions)
 
     valid_idx = features_df.index[valid_mask]
     timestamps = df_station.loc[valid_idx, "measured_at"].to_numpy()
     real_values = df_station.loc[valid_idx, "pm25"].to_numpy()
-
-    target_timestamps = pd.to_datetime(timestamps, utc=True) + timedelta(
-        hours=1
-    )
+    target_timestamps = pd.to_datetime(timestamps, utc=True) + timedelta(hours=1)
 
     return pd.DataFrame({
         "measured_at": target_timestamps,
