@@ -16,18 +16,18 @@
   ],
   "target_column": "target_pm25_h1",
   "metrics": {
-    "mae": 8.128101286905338,
-    "rmse": 11.791656462728088,
-    "n_train": 1110,
-    "n_test": 277,
-    "n_stations": 7
+    "mae": 3.272961869552751,
+    "rmse": 6.420158458669331,
+    "n_train": 39709,
+    "n_test": 9927,
+    "n_stations": 9
   },
   "hyperparameters": {
     "n_estimators": 200,
     "max_depth": 5,
     "learning_rate": 0.1
   },
-  "data_window_days": 28,
-  "saved_at": "2026-05-25T11:28:41.599725+00:00",
+  "data_window_days": 400,
+  "saved_at": "2026-05-26T09:55:52.140226+00:00",
   "model_filename": "pm25_xgb.joblib"
 }
