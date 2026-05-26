@@ -119,6 +119,18 @@ def _render_no_model_message() -> None:
             """
         )
 
+def _pm25_advice(pm25: float) -> tuple[str, str]:
+    """Retourne (emoji + label, conseil) selon le niveau PM2.5."""
+    if pm25 <= 12:
+        return "🟢 Excellent", "Air pur. Idéal pour toute activité en extérieur."
+    if pm25 <= 35:
+        return "🟡 Modéré", "Qualité acceptable. Les personnes sensibles peuvent ressentir une légère gêne."
+    if pm25 <= 55:
+        return "🟠 Mauvais", "Évitez les efforts intenses en extérieur, surtout si vous êtes sensible."
+    if pm25 <= 150:
+        return "🔴 Très mauvais", "Limitez les activités en extérieur. Port du masque recommandé."
+    return "🟣 Dangereux", "Restez à l'intérieur. Évitez toute exposition extérieure."
+
 
 def main() -> None:
     page_setup("Prévision air", icon="🔮")
@@ -221,6 +233,9 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+    label, advice = _pm25_advice(pred["predicted_pm25"])
+    st.info(f"**{label}** — {advice}")
+
     # --- Graphique avec 3 traces (inspiré OptiMobility) ---
     st.subheader("Évolution et prédictions")
 
@@ -304,7 +319,7 @@ def main() -> None:
             temporelle : les 20% les plus récents forment le set de test.
 
             ### Limites
-            - Fenêtre d'entraînement** : avec {metadata.get('data_window_days', '?')} jours
+            - **Fenêtre d'entraînement** : avec {metadata.get('data_window_days', '?')} jours
               de data, les patterns saisonniers ne sont pas encore tous capturés.
             - **Pas de variables exogènes** : émissions industrielles,
               jours fériés, événements parisiens ne sont pas pris en compte.
