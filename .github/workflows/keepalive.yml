@@ -1,0 +1,44 @@
+name: Keepalive
+
+# GitHub désactive automatiquement les workflows planifiés (cron) d'un repo
+# après 60 jours sans activité (commit/push). Ce job fait un commit trivial
+# une fois par mois pour maintenir l'activité du repo et éviter que le
+# workflow d'ingestion (ingestion.yml) ne se désactive tout seul.
+#
+# Coût : quasi nul (quelques secondes, une fois par mois).
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"  # Le 1er de chaque mois à 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Mettre à jour le marqueur de keepalive
+        run: |
+          mkdir -p .github/keepalive
+          echo "Dernier keepalive : $(date -u +'%Y-%m-%dT%H:%M:%SZ')" > .github/keepalive/last-run.txt
+
+      - name: Commit et push si changement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive/last-run.txt
+          if git diff --cached --quiet; then
+            echo "Rien à committer."
+          else
+            git commit -m "chore: keepalive mensuel (évite la désactivation du cron par GitHub)"
+            git push
+          fi
