@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     # Groq (LLM)
     groq_api_key: str = Field(default="", description="Clé API Groq")
     groq_model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="openai/gpt-oss-120b",
         description="Modèle Groq à utiliser",
     )
     groq_model_small: str = Field(
-        default="llama-3.1-8b-instant",
+        default="openai/gpt-oss-20b",
         description="Modèle plus léger pour les tâches simples (intent)",
     )
 
